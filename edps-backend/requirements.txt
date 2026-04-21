@@ -1,0 +1,11 @@
+flask
+flask-cors
+flask-sqlalchemy
+flask-migrate
+python-dotenv
+PyMySQL
+flask-jwt-extended
+authlib
+redis
+requests
+pandas
