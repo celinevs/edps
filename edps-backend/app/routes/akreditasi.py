@@ -53,10 +53,8 @@ def get_akreditasi():
             else:
                     query = query.filter(cast(Akreditasi.tanggal_selesai_lpmi, Date) >= today)
         
-        if only_null_assesor is not None:
-            only_null_assesor = only_null_assesor.lower() == "true"
-            if only_null_assesor:
-                query = query.filter(Akreditasi.total_skor_assesor.is_(None))
+        if only_null_assesor:
+            query = query.filter(Akreditasi.tanggal_validasi.is_(None))
 
         if fakultas:
             query = query.filter(Akreditasi.prodi.has(fakultas=fakultas))
@@ -191,7 +189,8 @@ def get_akreditasi_dropdown():
              query = query.join(Akreditasi.question_set).filter(
                  QuestionSet.id_lembaga == id_lembaga
                  )
-
+            
+        query = query.filter(Akreditasi.status != "In Progress")
         akreditasi_list = query.all()
         
         results = []

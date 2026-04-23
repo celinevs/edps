@@ -6,6 +6,7 @@ export interface QuestionSetItem {
   nama_lembaga: string | null;
   total_max_bobot: number;
   tanggal_aktif: string;
+  can_edit: boolean;
 }
 
 export interface GetQuestionSet {

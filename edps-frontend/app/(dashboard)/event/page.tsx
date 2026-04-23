@@ -120,21 +120,6 @@ function EventPage() {
         router.push('/form');
     };
 
-    const handleReview = (row: Akreditasi) => {
-        sessionStorage.setItem('formData', JSON.stringify({
-            id_regulasi: row.question_set.id_qs,
-            id_periode: row.id_akreditasi,
-            status: row.status,
-            nama_periode: row.nama_akreditasi,
-            tanggal_selesai: row.tanggal_selesai,
-            total_max_bobot: row.question_set.total_max_bobot,
-            is_admin: true,
-            lembaga: row.question_set.id_lembaga
-        }));
-
-        router.push('/form');
-    };
-
     const handleAnalytic = (row: Akreditasi) => {
         sessionStorage.setItem('formData', JSON.stringify({
             id_periode: row.id_akreditasi,
@@ -255,15 +240,7 @@ function EventPage() {
                             {(row.status == 'Submitted' || row.status == 'Validating') ? 'Validate Form' : 'Review'}
                         </Button>
                     }
-                    {(user?.role == "SUPERADMIN" || user?.role == "ADMIN") &&
-                        <Button
-                            size="small"
-                            variant="contained"
-                            onClick={() => handleReview(row)}
-                        >
-                            Review Form
-                        </Button>
-                    }
+                    
                     <Button
                         size="small"
                         variant="contained"

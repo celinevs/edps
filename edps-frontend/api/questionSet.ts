@@ -35,6 +35,17 @@ export const questionSetApi = baseApi
         }),
         providesTags: ["question-set"],
       }),
+      postQuestionSet: builder.mutation<
+        APIResponse<any>,
+        FormData
+      >({
+        query: (body) => ({
+          url: "/pertanyaan/import-csv",
+          method: "POST",
+          body,
+        }),
+        invalidatesTags: ["question-set"],
+      }),
 
     }),
   });
@@ -43,5 +54,6 @@ export const {
   useGetQuestionSetByProdiQuery,
   useLazyGetQuestionSetByProdiQuery,
   useGetQuestionSetPaginatedQuery,
-  useLazyGetQuestionSetPaginatedQuery
+  useLazyGetQuestionSetPaginatedQuery,
+  usePostQuestionSetMutation
 } = questionSetApi;

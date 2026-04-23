@@ -3,17 +3,16 @@ import { Controller, Control } from "react-hook-form";
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { DatePicker, DatePickerProps } from "@mui/x-date-pickers/DatePicker";
 
-interface DateInputControllerProps {
-    name: string;
-    control: Control<any>;
-    label: string;
-    rules?: object;
-    displayFormat?: string;
-    dataFormat?: string;
-    views?: Array<'year' | 'month' | 'day'>;
-}
+type DateInputControllerProps = {
+  name: string;
+  control: Control<any>;
+  label: string;
+  rules?: object;
+  displayFormat?: string;
+  dataFormat?: string;
+} & Omit<DatePickerProps, "value" | "onChange">;
 
 const DateInputController: React.FC<DateInputControllerProps> = ({
     name,

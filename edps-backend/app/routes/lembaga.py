@@ -4,6 +4,7 @@ from app.models.QuestionSet import QuestionSet
 from app.models.Prodi import Prodi
 from app.models.Lembaga import Lembaga
 from app.models.User import User
+from app.models.Akreditasi import Akreditasi
 from app.utils.response_handler import success_response, error_response, handle_exception
 from app.utils.decorator import role_required
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -76,8 +77,15 @@ def get_paginate_question_set():
 
         pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
+        used_qs_ids = set(
+            db.session.query(Akreditasi.id_qs).distinct().all()
+        )
+        used_qs_ids = {x[0] for x in used_qs_ids}
+
         results = []
         for qs in pagination.items:
+            is_used = qs.id_qs in used_qs_ids 
+
             results.append({
                 "id_qs": qs.id_qs,
                 "versi": qs.question_set,
@@ -85,7 +93,8 @@ def get_paginate_question_set():
                 "id_lembaga": qs.id_lembaga,
                 "nama_lembaga": qs.lembaga.nama_lembaga if qs.lembaga else None,
                 "total_max_bobot": qs.total_max_bobot,
-                "tanggal_aktif": qs.tanggal_aktif
+                "tanggal_aktif": qs.tanggal_aktif,
+                "can_edit": not is_used
             })
 
         return success_response(

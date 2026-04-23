@@ -1,14 +1,16 @@
 import React from "react";
 import { Controller, Control } from "react-hook-form";
-import { TextField } from "@mui/material";
+import { TextField, SxProps, Theme, TextFieldProps } from "@mui/material";
 
-interface TextInputControllerProps {
+type TextInputControllerProps = {
   name: string;
   control: Control<any>;
   label: string;
   placeholder: string;
-   rules?: object;
-}
+  rules?: object;
+  type?: string;
+  sx?: SxProps<Theme>;
+}  & TextFieldProps;
 
 const TextInputController: React.FC<TextInputControllerProps> = ({
   name,
@@ -16,6 +18,8 @@ const TextInputController: React.FC<TextInputControllerProps> = ({
   label,
   rules,
   placeholder,
+  type,
+  sx,
   ...props
 }) => {
   return (
@@ -32,6 +36,8 @@ const TextInputController: React.FC<TextInputControllerProps> = ({
           placeholder={placeholder}
           error={!!fieldState.error}
           helperText={fieldState.error?.message}
+          type={type}
+          sx={sx}
           {...props}
         />
       )}

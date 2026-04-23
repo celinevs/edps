@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { QuestionSetItem } from "@/model/QuestionSet";
 import { useGetQuestionSetPaginatedQuery } from "@/api/questionSet";
 import {
@@ -15,6 +16,7 @@ import DataTable, { Column } from "@/app/component/table/DataTable";
 import { formatDate } from "@/app/service/utils/func";
 
 function QuestionListPage() {
+    const router = useRouter();
     const [totalData, setTotalData] = useState(0)
     const [page, setPage] = useState(0)
     const [perPage, setPerPage] = useState(5)
@@ -47,6 +49,7 @@ function QuestionListPage() {
                     <Button
                         size="small"
                         variant="contained"
+                        disabled={!row.can_edit || false}
                     >
                         Edit File
                     </Button>
@@ -127,7 +130,7 @@ function QuestionListPage() {
                     <Button
                         variant="contained"
                         size="medium"
-                        // onClick={handleOpenDialog}
+                        onClick={() => router.push('/question-list/upload')}
                         startIcon={<AddIcon />}
                         sx={{
                             borderRadius: 4,

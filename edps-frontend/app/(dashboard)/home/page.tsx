@@ -20,9 +20,10 @@ function HomePage() {
     const [totalData, setTotalData] = useState(0)
     const [page, setPage] = useState(0)
     const [perPage, setPerPage] = useState(5)
-    const [periode, setPeriode] = useState<Akreditasi[]>([])
+    const [akreditasi, setAkreditasi] = useState<Akreditasi[]>([])
     const [summary, setSummary] = useState<Summary>()
     const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
+    const isUPPS = user?.role === 'UPPS'
     const { data } = useGetAkreditasiQuery({
         page: page + 1,
         per_page: perPage,
@@ -43,7 +44,7 @@ function HomePage() {
 
     useEffect(() => {
         if (data?.data) {
-            setPeriode(data?.data.results)
+            setAkreditasi(data?.data.results)
             setTotalData(data?.data.totalCount)
             setSummary(data?.data.summary)
         }
@@ -61,9 +62,9 @@ function HomePage() {
     const handleValidation = (row: Akreditasi) => {
         sessionStorage.setItem('formData', JSON.stringify({
             id_regulasi: row.question_set.id_qs,
-            id_periode: row.id_akreditasi,
+            id_akreditasi: row.id_akreditasi,
             status: row.status,
-            nama_periode: row.nama_akreditasi,
+            nama_akreditasi: row.nama_akreditasi,
             tanggal_selesai: row.tanggal_selesai,
             total_max_bobot: row.question_set.total_max_bobot,
             is_lpmi: true
@@ -71,24 +72,6 @@ function HomePage() {
 
         router.push('/form');
     };
-
-    const baseColumns: Column<Akreditasi>[] = [
-        {
-            id: 'prodi',
-            label: 'Prodi',
-            render: (row) => row.prodi?.kode_prodi ?? '-',
-        },
-        {
-            id: 'fakultas',
-            label: 'Faculty',
-            render: (row) => row.prodi?.fakultas ?? '-',
-        },
-        {
-            id: 'nama_lembaga',
-            label: 'Assessor',
-            render: (row) => row.question_set?.nama_lembaga ?? '-',
-        },
-    ];
 
     const columns: Column<Akreditasi>[] = [
         {
@@ -228,11 +211,11 @@ function HomePage() {
                     color: 'primary.main',
                 }}
             >
-                Validation Queue
+                {(isAdmin || isUPPS)? 'Progress Overview': 'Validation Queue'}
             </Typography>
             <DataTable
                 columns={filteredColumns}
-                rows={periode}
+                rows={akreditasi}
                 page={page}
                 rowsPerPage={perPage}
                 totalData={totalData}
