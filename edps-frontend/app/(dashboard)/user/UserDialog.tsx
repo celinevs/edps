@@ -77,6 +77,12 @@ function UserDialog(props: UserDialogProps) {
 
     const role = watch('role')
 
+    useEffect(() => {
+        if (role !== 'PRODI') {
+            setValue('id_prodi', '');
+        }
+    }, [role, setValue]);
+
     const onFormSubmit = async (data: UserRequest) => {
         try {
             if (userData) {
@@ -126,7 +132,7 @@ function UserDialog(props: UserDialogProps) {
                 maxWidth="sm"
             >
                 <form onSubmit={handleSubmit(onFormSubmit)}>
-                    <DialogTitle>Create user</DialogTitle>
+                    <DialogTitle>{userData ? 'Update user' : 'Create user'}</DialogTitle>
                     <IconButton
                         aria-label="close"
                         onClick={onClose}
@@ -198,7 +204,7 @@ function UserDialog(props: UserDialogProps) {
                             color="primary"
                             type='submit'
                         >
-                            Create
+                            {userData ? 'Update' : 'Create'}
                         </Button>
                     </DialogActions>
                 </form>

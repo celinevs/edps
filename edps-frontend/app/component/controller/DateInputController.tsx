@@ -12,6 +12,7 @@ type DateInputControllerProps = {
   rules?: object;
   displayFormat?: string;
   dataFormat?: string;
+  inputProps?: any;
 } & Omit<DatePickerProps, "value" | "onChange">;
 
 const DateInputController: React.FC<DateInputControllerProps> = ({
@@ -22,6 +23,7 @@ const DateInputController: React.FC<DateInputControllerProps> = ({
     displayFormat = "DD MMMM YYYY",
     dataFormat = "YYYY-MM-DD",
     views = ['day'],
+    inputProps,
     ...props
 }) => {
     return (
@@ -48,6 +50,7 @@ const DateInputController: React.FC<DateInputControllerProps> = ({
                                 fullWidth: true,
                                 error: !!fieldState.error,
                                 helperText: fieldState.error?.message,
+                                inputProps: inputProps
                             },
                         }}
                         {...props}

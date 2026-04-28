@@ -35,6 +35,16 @@ export const questionSetApi = baseApi
         }),
         providesTags: ["question-set"],
       }),
+      getQuestionSetID: builder.mutation<
+        APIResponse<QuestionSetItem>,
+        string
+      >({
+        query: (id_qs) => ({
+          url: `/question-set/${id_qs}`,
+          method: "GET",
+        }),
+        invalidatesTags: ["question-set"],
+      }),
       postQuestionSet: builder.mutation<
         APIResponse<any>,
         FormData
@@ -55,5 +65,6 @@ export const {
   useLazyGetQuestionSetByProdiQuery,
   useGetQuestionSetPaginatedQuery,
   useLazyGetQuestionSetPaginatedQuery,
-  usePostQuestionSetMutation
+  usePostQuestionSetMutation,
+  useGetQuestionSetIDMutation
 } = questionSetApi;

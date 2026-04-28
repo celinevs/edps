@@ -9,12 +9,23 @@ import {
 } from "@mui/material";
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import GoogleIcon from '@mui/icons-material/Google';
-import { useCallback } from "react";
+import { useCallback, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 const LoginPage = () => {
   const handleGoogleLogin = useCallback(() => {
     window.location.href = "http://localhost:5000/login/google";
   }, []);
+
+  const searchParams = useSearchParams();
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (err) {
+      setError(decodeURIComponent(err));
+    }
+  }, [searchParams]);
 
   return (
     <Box
@@ -61,6 +72,15 @@ const LoginPage = () => {
         >
           Sign in with Google
         </Button>
+        {error && (
+          <Typography
+            variant="body2"
+            color="error"
+            sx={{ mt: 2 }}
+          >
+            {error}
+          </Typography>
+        )}
       </Paper>
     </Box>
   );

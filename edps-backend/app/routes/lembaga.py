@@ -111,6 +111,32 @@ def get_paginate_question_set():
     except Exception as e:
         return handle_exception(e)
 
+@lembaga_bp.route("/question-set/<id_qs>", methods=["GET"])
+@jwt_required()
+def get_question_set_by_id(id_qs):
+    try:
+        qs = QuestionSet.query.get(id_qs)
+
+        if not qs:
+            return error_response("Question set not found", 404)
+
+        return success_response(
+            data={
+                "id_qs": qs.id_qs,
+                "id_lembaga": qs.id_lembaga,
+                "nama_lembaga": qs.lembaga.nama_lembaga if qs.lembaga else None,
+                "versi": qs.question_set,
+                "tahun_berlaku": qs.tahun_berlaku,
+                "tanggal_aktif": qs.tanggal_aktif,
+                "status_aktif": qs.status_aktif,
+                "total_max_bobot": qs.total_max_bobot
+            },
+            message="Question set retrieved successfully"
+        )
+
+    except Exception as e:
+        return handle_exception(e)
+
 @lembaga_bp.route("/lembaga", methods=["GET"])
 @jwt_required()
 def get_lembaga():

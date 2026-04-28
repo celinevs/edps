@@ -4,7 +4,7 @@ from app import db
 from app.models.User import User
 from app.utils.response_handler import success_response, error_response
 from app.utils.decorator import role_required
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 user_bp = Blueprint('user', __name__)
 
@@ -49,11 +49,19 @@ def create_user():
 @role_required('ADMIN', 'SUPERADMIN')
 def get_users():
 
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    current_role = current_user.role
     disable_pagination = request.args.get('disable_pagination', 'false').lower() == 'true'
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('page_size', 10))
 
     query = User.query
+
+    query = query.filter(User.id_user != current_user_id)
+
+    if current_role == "ADMIN":
+        query = query.filter(User.role != "SUPERADMIN")
 
     if disable_pagination:
         users = query.all()

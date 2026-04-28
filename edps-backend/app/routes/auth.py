@@ -86,11 +86,10 @@ def oauth_callback(provider):
     user = User.query.filter_by(email=email).first()
     
     if not user:
-        # Ask Admin to add them
-        return error_response(f"Akun tidak ditemukan, hubungi admin untuk menambahkan", 404)
+        return redirect("http://localhost:3000/login?error=Account not found. Please contact the admin for access.")
     
     if not user.is_active:
-        return error_response(f"Account is deactivated", 403)
+         return redirect("http://localhost:3000/login?error=Account deactivated")
     
     # if not user.username:
     #     user.username = google_name

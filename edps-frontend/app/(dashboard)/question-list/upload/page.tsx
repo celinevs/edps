@@ -1,12 +1,14 @@
 "use client"
-import React, { useEffect, useState } from "react";
+import React, { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from 'react-hook-form';
+import { useSearchParams } from "next/navigation";
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useGetLembagaQuery } from "@/api/lembaga";
-import { usePostQuestionSetMutation } from "@/api/questionSet";
+import { usePostQuestionSetMutation, useGetQuestionSetIDMutation } from "@/api/questionSet";
 import { Lembaga } from "@/model/Lembaga";
+import { QuestionSetItem } from "@/model/QuestionSet";
 import {
     Typography,
     Button,
@@ -37,9 +39,12 @@ export const UploadCSVSchema = z.object({
 export type UploadCSVRequest = z.infer<typeof UploadCSVSchema>;
 
 function UploadQuestionPage() {
+    const searchParams = useSearchParams();
+    const id_qs = searchParams.get("id_qs");
     const [file, setFile] = useState<File>();
     const [lembaga, setLembaga] = useState<Lembaga[]>([]);
     const { data: lembagaData } = useGetLembagaQuery(undefined);
+    const [getIdQuestionSet] = useGetQuestionSetIDMutation();
     const [postQuestionSet] = usePostQuestionSetMutation();
     const router = useRouter();
     const [snackbar, setSnackbar] = useState({
@@ -67,6 +72,30 @@ function UploadQuestionPage() {
         defaultValues,
         resolver: zodResolver(UploadCSVSchema)
     });
+
+    useEffect(() => {
+        if (id_qs) {
+            getIdQuestionSet(id_qs)
+                .unwrap()
+                .then((res) => {
+                    const qs = res.data;
+
+                    const [tahun_mulai, tahun_akhir] =
+                        (qs.tahun_berlaku || "").split("/");
+
+                    reset({
+                        file: undefined,
+                        id_lembaga: String(qs.id_lembaga || ""),
+                        question_set: String(qs.versi || ""),
+                        tahun_mulai: tahun_mulai || "",
+                        tahun_akhir: tahun_akhir || "",
+                    });
+                })
+                .catch((err) => {
+                    console.error("Failed to fetch question set:", err);
+                });
+        }
+    }, [id_qs, getIdQuestionSet, reset]);
 
     const handleFile = (selectedFile: File) => {
         setValue("file", selectedFile, { shouldValidate: true });
@@ -154,9 +183,9 @@ function UploadQuestionPage() {
                     </DropdownInputController>
                 </Grid>
             </Grid>
-            <Grid container spacing={5.5} mb={3}>
+            <Grid container spacing={10.5} mb={3}>
                 <Grid size="auto">
-                    <Typography fontWeight="bold">Question Set*:</Typography>
+                    <Typography fontWeight="bold">Version*:</Typography>
                 </Grid>
 
                 <Grid size={5.9}>

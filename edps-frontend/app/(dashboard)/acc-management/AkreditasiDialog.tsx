@@ -11,6 +11,7 @@ import { usePostAkreditasiMutation, usePutAkreditasiMutation } from '@/api/akred
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import dayjs from 'dayjs';
 import { useState, useEffect } from 'react';
 import TextInputController from '@/app/component/controller/TextInputController';
 import DateInputController from '@/app/component/controller/DateInputController';
@@ -22,9 +23,15 @@ interface AkreditasiDialogProps {
     accData?: Akreditasi;
 }
 
+const formatDate = (date: string) => {
+    if (!date) return '';
+    return new Date(date).toISOString().split('T')[0];
+};
+
 export const AkreditasiRequestSchema = z.object({
     tanggal_mulai: z.string().min(1),
-    tanggal_selesai: z.string().min(1),
+    tanggal_selesai_prodi: z.string().min(1),
+    tanggal_selesai_lpmi: z.string().min(1),
     tahun_mulai: z.string().min(1),
     tahun_selesai: z.string().min(1),
     id_qs: z.string().min(1),
@@ -56,7 +63,8 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
 
     const defaultValues: AkreditasiRequest = {
         tanggal_mulai: '',
-        tanggal_selesai: '',
+        tanggal_selesai_prodi: '',
+        tanggal_selesai_lpmi: '',
         tahun_mulai: '',
         tahun_selesai: '',
         id_qs: '',
@@ -73,12 +81,13 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
     useEffect(() => {
         if (accData) {
             const [tahun_mulai, tahun_selesai] = accData.tahun_berlaku
-            ? accData.tahun_berlaku.split('/')
-            : ['', ''];
+                ? accData.tahun_berlaku.split('/')
+                : ['', ''];
 
             reset({
-                tanggal_mulai: accData.tanggal_mulai || '',
-                tanggal_selesai: accData.tanggal_selesai || '',
+                tanggal_mulai: formatDate(accData.tanggal_mulai),
+                tanggal_selesai_prodi: formatDate(accData.tanggal_selesai),
+                tanggal_selesai_lpmi: formatDate(accData.tanggal_selesai_lpmi),
                 tahun_mulai: tahun_mulai || '',
                 tahun_selesai: tahun_selesai || '',
                 id_qs: accData.question_set.id_qs || '',
@@ -91,6 +100,15 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
     }, [accData, reset]);
 
     const selectedProdi = watch('id_prodi');
+    const tanggalMulai = watch('tanggal_mulai');
+    const tanggalSelesaiProdi = watch('tanggal_selesai_prodi');
+
+    const getMinDate = (date: string) => {
+        if (!date) return undefined;
+        const d = new Date(date);
+        d.setDate(d.getDate() + 1);
+        return dayjs(d);
+    };
 
     useEffect(() => {
         if (selectedProdi) {
@@ -116,7 +134,8 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                     id: accData.id_akreditasi,
                     data: {
                         tanggal_mulai: data.tanggal_mulai,
-                        tanggal_selesai: data.tanggal_selesai,
+                        tanggal_selesai_prodi: data.tanggal_selesai_prodi,
+                        tanggal_selesai_lpmi: data.tanggal_selesai_lpmi,
                         tahun_berlaku: `${data.tahun_mulai}/${data.tahun_selesai}`,
                         id_qs: data.id_qs,
                         nama_akreditasi: data.nama_akreditasi,
@@ -132,7 +151,8 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
             else {
                 await PostAkreditasi({
                     tanggal_mulai: data.tanggal_mulai,
-                    tanggal_selesai: data.tanggal_selesai,
+                    tanggal_selesai_prodi: data.tanggal_selesai_prodi,
+                    tanggal_selesai_lpmi: data.tanggal_selesai_lpmi,
                     tahun_berlaku: `${data.tahun_mulai}/${data.tahun_selesai}`,
                     id_qs: data.id_qs,
                     nama_akreditasi: data.nama_akreditasi,
@@ -165,7 +185,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                 onClose={onClose}
             >
                 <form onSubmit={handleSubmit(onFormSubmit)}>
-                    <DialogTitle>Create new period</DialogTitle>
+                    <DialogTitle>{accData ? 'Edit Accreditation' : 'Create new Accreditation'}</DialogTitle>
                     <IconButton
                         aria-label="close"
                         onClick={onClose}
@@ -213,22 +233,25 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                                 />
                             </Grid>
                         </Grid>
-                        <Grid container spacing={2}>
-                            <Grid size={6}>
-                                <DateInputController
-                                    name="tanggal_mulai"
-                                    control={control}
-                                    label="Tanggal Mulai"
-                                />
-                            </Grid>
-                            <Grid size={6}>
-                                <DateInputController
-                                    name="tanggal_selesai"
-                                    control={control}
-                                    label="Tanggal Selesai"
-                                />
-                            </Grid>
-                        </Grid>
+                        <DateInputController
+                            name="tanggal_mulai"
+                            control={control}
+                            label="Tanggal Mulai"
+                        />
+                        <DateInputController
+                            name="tanggal_selesai_prodi"
+                            control={control}
+                            label="Tanggal Selesai Prodi"
+                            disabled={!tanggalMulai}
+                            minDate={getMinDate(tanggalMulai)}
+                        />
+                        <DateInputController
+                            name="tanggal_selesai_lpmi"
+                            control={control}
+                            label="Tanggal Selesai LPMI"
+                            disabled={!tanggalSelesaiProdi}
+                            minDate={getMinDate(tanggalSelesaiProdi)}
+                        />
                         <Grid container spacing={2}>
                             <Grid size={6}>
                                 <DropdownInputController
@@ -278,7 +301,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                             color="primary"
                             type='submit'
                         >
-                            Create
+                            {accData ? 'Update' : 'Create'}
                         </Button>
                     </DialogActions>
                 </form>

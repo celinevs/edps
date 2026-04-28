@@ -30,8 +30,8 @@ const WeightSummaryTable: React.FC<Props> = ({
     maxPoints,
 }) => {
     return (
-        <TableContainer component={Paper}>
-            <Table size="small">
+        <TableContainer component={Paper} sx={{ maxHeight: 655 }}>
+            <Table size="small" stickyHeader>
                 <TableHead>
                     <TableRow sx={{ backgroundColor: "#f5f5f5" }}>
                         <TableCell align="center"><b>Weight</b></TableCell>
@@ -56,7 +56,12 @@ const WeightSummaryTable: React.FC<Props> = ({
                     ))}
 
                     {/* TOTAL ROW */}
-                    <TableRow sx={{ backgroundColor: "#fafafa" }}>
+                    <TableRow sx={{
+                        position: "sticky",
+                        bottom: 0,
+                        backgroundColor: "#fafafa",
+                        zIndex: 1
+                    }}>
                         <TableCell align="center"><b>Total</b></TableCell>
 
                         <TableCell align="center">

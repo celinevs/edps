@@ -105,6 +105,17 @@ def import_question_csv():
         tahun_mulai = request.form.get("tahun_mulai")
         tahun_akhir = request.form.get("tahun_akhir")
 
+        existing = QuestionSet.query.filter(
+            QuestionSet.id_lembaga == id_lembaga,
+            QuestionSet.question_set == question_set_version
+        ).first()
+        
+        if existing:
+            return error_response(
+                "Question set version already exists for this institution",
+                400
+            )
+
         qs = QuestionSet(
             id_lembaga=id_lembaga,
             question_set=question_set_version,
@@ -121,13 +132,19 @@ def import_question_csv():
         elif file.filename.endswith('.csv'):
             df = pd.read_csv(file)
         else:
-            return error_response("Format file harus .csv atau .xlsx", 400)
+            return error_response(
+                "File format must be .csv or .xlsx",
+                400
+            )
 
         inserted = 0
 
         if df["q_no"].duplicated().any():
             dup = df[df["q_no"].duplicated()]["q_no"].tolist()
-            return error_response(f"Duplicate q_no di file: {dup}", 400)
+            return error_response(
+                f"Duplicate q_no found in file: {dup}",
+                400
+            )
 
         for _, row in df.iterrows():
             if id_lembaga == 1:
@@ -168,7 +185,7 @@ def import_question_csv():
                 "id_qs": qs.id_qs,
                 "inserted": inserted
             },
-            message="Question set dan pertanyaan berhasil dibuat"
+            message="Question set and questions successfully created"
         )
 
     except Exception as e:
@@ -181,11 +198,25 @@ def update_question_csv(id_qs):
     try:
         qs = QuestionSet.query.get(id_qs)
         if not qs:
-            return error_response("Question set tidak ditemukan", 404)
+            return error_response("Question set not found", 404)
+        
+        new_version = float(request.form.get("question_set", qs.question_set))
+        
+        existing = QuestionSet.query.filter(
+            QuestionSet.id_lembaga == qs.id_lembaga,
+            QuestionSet.question_set == new_version,
+            QuestionSet.id_qs != id_qs
+        ).first()
+
+        if existing:
+            return error_response(
+                "Question set version already exists for this institution",
+                400
+            )
 
         file = request.files['file']
 
-        qs.question_set = float(request.form.get("question_set", qs.question_set))
+        qs.question_set = new_version
         qs.tahun_berlaku = request.form.get("tahun_berlaku", qs.tahun_berlaku)
 
         if file.filename.endswith('.xlsx'):
@@ -193,15 +224,24 @@ def update_question_csv(id_qs):
         elif file.filename.endswith('.csv'):
             df = pd.read_csv(file)
         else:
-            return error_response("Format file harus .csv atau .xlsx", 400)
+            return error_response("File format must be .csv or .xlsx", 400)
 
-        is_used = db.session.query(exists().where(Akreditasi.id_qs == id_qs)).scalar()
+        is_used = db.session.query(
+            exists().where(Akreditasi.id_qs == id_qs)
+        ).scalar()
+
         if is_used:
-            return error_response( "Question set sudah digunakan pada akreditasi, tidak dapat diubah", 400)
+            return error_response(
+                "Question set is already used in accreditation and cannot be modified",
+                400
+            )
 
         if df["q_no"].duplicated().any():
             dup = df[df["q_no"].duplicated()]["q_no"].tolist()
-            return error_response(f"Duplicate q_no di file: {dup}", 400)
+            return error_response(
+                f"Duplicate q_no found in file: {dup}",
+                400
+            )
 
         if qs.id_lembaga == 1:
             LamInfokom.query.filter_by(id_qs=id_qs).delete()
@@ -250,7 +290,7 @@ def update_question_csv(id_qs):
                 "id_qs": id_qs,
                 "inserted": inserted
             },
-            message="Question set berhasil diupdate"
+            message="Question set successfully updated"
         )
 
     except Exception as e:

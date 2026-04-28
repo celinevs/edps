@@ -20,7 +20,7 @@ function QuestionListPage() {
     const [totalData, setTotalData] = useState(0)
     const [page, setPage] = useState(0)
     const [perPage, setPerPage] = useState(5)
-    const [questionSet, setQuestionSet] = useState<QuestionSetItem[]>([])
+    const [questionSet, setQuestionSet] = useState<QuestionSetItem[]>([]);
     const { data } = useGetQuestionSetPaginatedQuery({
         page: page + 1,
         per_page: perPage,
@@ -50,6 +50,7 @@ function QuestionListPage() {
                         size="small"
                         variant="contained"
                         disabled={!row.can_edit || false}
+                        onClick={() => router.push(`/question-list/upload?id_qs=${row.id_qs}`)}
                     >
                         Edit File
                     </Button>

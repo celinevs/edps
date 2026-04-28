@@ -4,10 +4,11 @@ from app.models.Jawaban import Jawaban
 from app.models.Akreditasi import Akreditasi
 from app.models.QuestionList import LamEmba, LamInfokom
 from app.models.QuestionSet import QuestionSet
+from app.models.User import User
 from app.utils.response_handler import success_response, error_response, handle_exception
 from app.utils.decorator import role_required
 from datetime import datetime
-from flask_jwt_extended import jwt_required, get_jwt
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from sqlalchemy import func, case, cast, Date, Integer
 from datetime import datetime, date
 
@@ -22,12 +23,13 @@ def get_akreditasi():
 
         if page < 1 or per_page < 1:
             return error_response("Page dan per_page harus lebih dari 0", 400)
-        
-        user = get_jwt()
-        role = user.get("role")
+
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        role = user.role
 
         id_qs = request.args.get('id_qs')
-        id_prodi = request.args.get('id_prodi')
+        id_prodi = request.args.get('id_prodi') or user.id_prodi
         # id_lembaga = request.args.get('id_lembaga')
         tahun_berlaku = request.args.get('tahun_berlaku')
         status = request.args.get('status')
@@ -114,19 +116,17 @@ def get_akreditasi():
                 progress = a.progress_lpmi
                 tanggal_selesai = a.tanggal_selesai_lpmi
             elif role == "ADMIN" or role == "SUPERADMIN":
+                tanggal_selesai = a.tanggal_selesai_prodi
                 if only_null_assesor is not None:
                     only_null_assesor = only_null_assesor.lower() == "true"
                     if only_null_assesor:
                         progress = a.progress_assesor
-                        tanggal_selesai = a.tanggal_selesai_lpmi
                 elif a.progress_prodi != 100:
                      progress = a.progress_prodi
-                     tanggal_selesai = a.tanggal_selesai_prodi
                 else:
                     progress = a.progress_lpmi
-                    tanggal_selesai = a.tanggal_selesai_lpmi
 
-            results.append({
+            item = {
                 "id_akreditasi": a.id_akreditasi,
                 "nama_akreditasi": a.nama_akreditasi,
                 "status": a.status,
@@ -135,27 +135,31 @@ def get_akreditasi():
                 "total_skor_lpmi": a.total_skor_lpmi,
                 "total_skor_assesor": a.total_skor_assesor,
                 'progress': progress,
-
                 "prodi": {
                     "id_prodi": a.prodi.id_prodi,
                     "kode_prodi": a.prodi.kode_prodi,
                     "nama_prodi": a.prodi.nama_prodi,
                     "fakultas": a.prodi.fakultas.nama_fakultas
-                } if a.prodi else None,
-
+                    } if a.prodi else None,
+                
                 "question_set": {
                     "id_qs": a.question_set.id_qs,
                     "id_lembaga": a.question_set.lembaga.id_lembaga,
                     "nama_lembaga": a.question_set.lembaga.nama_lembaga,
                     "total_max_bobot": a.question_set.total_max_bobot
-                } if a.question_set else None,
-
+                    } if a.question_set else None,
+                
                 "tanggal_mulai": a.tanggal_mulai,
                 "tanggal_selesai": tanggal_selesai,
                 "tanggal_pengisian": a.tanggal_pengisian,
                 "tanggal_validasi": a.tanggal_validasi,
                 "tanggal_review": a.tanggal_review,
-            })
+                }
+            
+            if role in ["ADMIN", "SUPERADMIN"]:
+                item["tanggal_selesai_lpmi"] = a.tanggal_selesai_lpmi
+
+            results.append(item)
 
         return success_response(
             data={
@@ -876,7 +880,8 @@ def add_akreditasi():
 
         required_fields = [
             "tanggal_mulai",
-            "tanggal_selesai",
+            "tanggal_selesai_prodi",
+            "tanggal_selesai_lpmi",
             "nama_akreditasi",
             "tahun_berlaku",
             "id_qs",
@@ -889,8 +894,8 @@ def add_akreditasi():
 
         akreditasi = Akreditasi(
             tanggal_mulai=datetime.strptime(data["tanggal_mulai"], "%Y-%m-%d"),
-            tanggal_selesai_prodi=datetime.strptime(data["tanggal_selesai"], "%Y-%m-%d"),
-            tanggal_selesai_lpmi=datetime.strptime(data["tanggal_selesai"], "%Y-%m-%d"),
+            tanggal_selesai_prodi=datetime.strptime(data["tanggal_selesai_prodi"], "%Y-%m-%d"),
+            tanggal_selesai_lpmi=datetime.strptime(data["tanggal_selesai_lpmi"], "%Y-%m-%d"),
             nama_akreditasi=data["nama_akreditasi"],
             tahun_berlaku=data["tahun_berlaku"],
             id_qs=data["id_qs"],
@@ -919,7 +924,8 @@ def update_akreditasi(id):
             return error_response("Akreditasi tidak ditemukan", 404)
 
         akreditasi.tanggal_mulai = datetime.strptime(data["tanggal_mulai"], "%Y-%m-%d")
-        akreditasi.tanggal_selesai = datetime.strptime(data["tanggal_selesai"], "%Y-%m-%d")
+        akreditasi.tanggal_selesai_prodi = datetime.strptime(data["tanggal_selesai_prodi"], "%Y-%m-%d")
+        akreditasi.tanggal_selesai_lpmi = datetime.strptime(data["tanggal_selesai_lpmi"], "%Y-%m-%d")
         akreditasi.nama_akreditasi = data["nama_akreditasi"]
         akreditasi.tahun_berlaku = data["tahun_berlaku"]
         akreditasi.id_qs = data["id_qs"]

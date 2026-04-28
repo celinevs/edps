@@ -39,7 +39,7 @@ function EventPage() {
     const [akreditasi, setAkreditasi] = useState<Akreditasi[]>([]);
     const [prodi, setProdi] = useState<GetProdi[]>([]);
     const { data: prodiData } = useGetProdiQuery();
-    const {data: tahunData} = useGetTahunBerlakuQuery({id_prodi: user?.id_prodi || undefined});
+    const { data: tahunData } = useGetTahunBerlakuQuery({ id_prodi: user?.id_prodi || undefined });
 
     const defaultValues: AkreditasiFilter = {
         tahun_berlaku: '',
@@ -175,36 +175,35 @@ function EventPage() {
                 const assesorPercent = (row.total_skor_assesor / max) * 100;
 
                 return (
-                    <Box
-                        sx={{
-                            width: 120,
-                            height: 12,
-                            display: 'flex',
-                            borderRadius: 2,
-                            overflow: 'hidden',
-                            backgroundColor: '#eee',
-                        }}
-                    >
-                        <Box
-                            sx={{
-                                width: `${prodiPercent}%`,
-                                backgroundColor: '#8B0000',
-                            }}
-                        />
-                        <Box
-                            sx={{
-                                width: `${lpmiPercent}%`,
-                                backgroundColor: '#E69F00',
-                            }}
-                        />
-
-                        <Box
-                            sx={{
-                                width: `${assesorPercent}%`,
-                                backgroundColor: '#ccc',
-                            }}
-                        />
-                    </Box>
+                    <Stack spacing={0.5} sx={{ minWidth: 150 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ width: 60, fontSize: '0.7rem' }}>Prodi:</Box>
+                            <Box sx={{ flex: 1, height: 6, bgcolor: '#eee', borderRadius: 1, overflow: 'hidden' }}>
+                                <Box sx={{ width: `${prodiPercent}%`, height: '100%', bgcolor: '#8B0000' }} />
+                            </Box>
+                            <Box sx={{ fontSize: '0.7rem', minWidth: 40 }}>
+                                {row.total_skor_prodi === 0 ? '-' : `${Math.round(prodiPercent)}%`}
+                            </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ width: 60, fontSize: '0.7rem' }}>LPMI:</Box>
+                            <Box sx={{ flex: 1, height: 6, bgcolor: '#eee', borderRadius: 1, overflow: 'hidden' }}>
+                                <Box sx={{ width: `${lpmiPercent}%`, height: '100%', bgcolor: '#E69F00' }} />
+                            </Box>
+                            <Box sx={{ fontSize: '0.7rem', minWidth: 40 }}>
+                                {row.total_skor_lpmi === 0 ? '-' : `${Math.round(lpmiPercent)}%`}
+                            </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ width: 60, fontSize: '0.7rem' }}>Assesor:</Box>
+                            <Box sx={{ flex: 1, height: 6, bgcolor: '#eee', borderRadius: 1, overflow: 'hidden' }}>
+                                <Box sx={{ width: `${assesorPercent}%`, height: '100%', bgcolor: '#ccc' }} />
+                            </Box>
+                            <Box sx={{ fontSize: '0.7rem', minWidth: 40 }}>
+                                {row.total_skor_assesor === 0 ? '-' : `${Math.round(assesorPercent)}%`}
+                            </Box>
+                        </Box>
+                    </Stack>
                 );
             },
         },
@@ -240,7 +239,7 @@ function EventPage() {
                             {(row.status == 'Submitted' || row.status == 'Validating') ? 'Validate Form' : 'Review'}
                         </Button>
                     }
-                    
+
                     <Button
                         size="small"
                         variant="contained"
@@ -286,7 +285,12 @@ function EventPage() {
                             name="id_prodi"
                             control={control}
                             label="Prodi"
-                            sx={{ width: 100 }}
+                            sx={{
+                                "& .MuiInputBase-root": {
+                                    height: 36,
+                                    width: 200
+                                }
+                            }}
                         >
                             {prodi.map((category) => (
                                 <MenuItem

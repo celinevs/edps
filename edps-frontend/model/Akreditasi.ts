@@ -56,7 +56,8 @@ export interface AkreditasiParam {
 
 export interface AkreditasiRequest {
     tanggal_mulai: string;
-    tanggal_selesai: string;
+    tanggal_selesai_prodi: string;
+    tanggal_selesai_lpmi: string;
     nama_akreditasi: string;
     tahun_berlaku: string;
     id_qs: string;

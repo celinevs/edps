@@ -75,9 +75,15 @@ function AccManagementPage() {
         },
         {
             id: 'tanggal_selesai',
-            label: 'End Date',
+            label: 'End Date Prodi',
             render: (row) =>
                 new Date(row.tanggal_selesai).toLocaleDateString("en-GB"),
+        },
+        {
+            id: 'tanggal_selesai_lpmi',
+            label: 'End Date LPMI',
+            render: (row) =>
+                new Date(row.tanggal_selesai_lpmi).toLocaleDateString("en-GB"),
         },
         {
             id: 'actions',
