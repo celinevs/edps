@@ -6,9 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useGetLembagaQuery } from "@/api/lembaga";
-import { usePostQuestionSetMutation, useGetQuestionSetIDMutation } from "@/api/questionSet";
+import { usePostQuestionSetMutation, useGetQuestionSetIDMutation, useUpdateQuestionSetMutation } from "@/api/questionSet";
 import { Lembaga } from "@/model/Lembaga";
-import { QuestionSetItem } from "@/model/QuestionSet";
 import {
     Typography,
     Button,
@@ -27,31 +26,75 @@ export const UploadCSVSchema = z.object({
     file: z
         .instanceof(File)
         .optional()
-        .refine((file) => file !== undefined, "File wajib diupload")
-        .refine((file) => file !== undefined && file.name.endsWith(".csv"), "File harus CSV"),
+        .refine((file) => !file || file.name.endsWith(".csv"), "File must be a CSV"),
+    gambar: z
+        .instanceof(File)
+        .optional()
+        .refine(
+            (file) =>
+                !file ||
+                ["image/jpeg", "image/png", "image/jpg", "image/webp"].includes(file.type),
+            "Image must be JPG, PNG, or WEBP"
+        )
+        .refine(
+            (file) => !file || file.size <= 2 * 1024 * 1024,
+            "Image must be less than 2MB"
+        ),
+
+    existingFile: z.any().optional(),
+    existingGambar: z.any().optional(),
 
     id_lembaga: z.string().min(1),
     question_set: z.string().min(1),
     tahun_mulai: z.string().min(1),
     tahun_akhir: z.string().min(1),
-});
+    label_link: z.string().min(1),
+    link: z.string().min(1).url("Invalid URL format"),
+    deskripsi_gambar: z.string().min(1),
+})
+    .superRefine((data, ctx) => {
+        if (!data.file && !data.existingFile) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["file"],
+                message: "File is required",
+            });
+        }
+        if (!data.gambar && !data.existingGambar) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["gambar"],
+                message: "Image is required",
+            });
+        }
+    });
 
 export type UploadCSVRequest = z.infer<typeof UploadCSVSchema>;
 
 function UploadQuestionPage() {
+    const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
     const searchParams = useSearchParams();
     const id_qs = searchParams.get("id_qs");
     const [file, setFile] = useState<File>();
+    const [gambar, setGambar] = useState<File>();
     const [lembaga, setLembaga] = useState<Lembaga[]>([]);
     const { data: lembagaData } = useGetLembagaQuery(undefined);
     const [getIdQuestionSet] = useGetQuestionSetIDMutation();
     const [postQuestionSet] = usePostQuestionSetMutation();
+    const [updateQuestionSet] = useUpdateQuestionSetMutation();
     const router = useRouter();
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: "",
         severity: "success" as "success" | "error",
     });
+    const [existingFile, setExistingFile] = useState<{
+        name: string;
+        url: string;
+    } | null>(null);
+    const [existingGambar, setExistingGambar] = useState<string>('')
+
+    console.log(existingFile)
 
     useEffect(() => {
         if (lembagaData?.data) {
@@ -61,10 +104,14 @@ function UploadQuestionPage() {
 
     const defaultValues: UploadCSVRequest = {
         file: undefined,
+        gambar: undefined,
         id_lembaga: '',
         question_set: '',
         tahun_mulai: '',
-        tahun_akhir: ''
+        tahun_akhir: '',
+        link: '',
+        label_link: '',
+        deskripsi_gambar: ''
     }
 
     const { control, formState, handleSubmit, setValue, setError, trigger, watch, reset } = useForm<UploadCSVRequest>({
@@ -89,7 +136,26 @@ function UploadQuestionPage() {
                         question_set: String(qs.versi || ""),
                         tahun_mulai: tahun_mulai || "",
                         tahun_akhir: tahun_akhir || "",
+                        label_link: qs.label_link || "",
+                        link: qs.link || "",
+                        deskripsi_gambar: qs.deskripsi_gambar || "",
+                        existingFile: qs.csv_path ? true : undefined,
+                        existingGambar: qs.gambar_path ? true : undefined
                     });
+
+                    if (qs.csv_path) {
+                        setExistingFile({
+                            name: qs.csv_name || "Existing File",
+                            url: `${BASE_URL}${qs.csv_path}`,
+                        });
+                    }
+                    if (qs.gambar_path) {
+                        let imagePath = qs.gambar_path;
+                        if (imagePath.startsWith('/app/')) {
+                            imagePath = imagePath.substring(4);
+                        }
+                        setExistingGambar(`${BASE_URL}${imagePath}`);
+                    }
                 })
                 .catch((err) => {
                     console.error("Failed to fetch question set:", err);
@@ -102,6 +168,18 @@ function UploadQuestionPage() {
         setFile(selectedFile)
     };
 
+    const handleGambar = (selectedFile: File) => {
+        setValue("gambar", selectedFile, { shouldValidate: true });
+        setGambar(selectedFile)
+    };
+
+    const handleDropGambar = (e: React.DragEvent) => {
+        e.preventDefault();
+        if (e.dataTransfer.files[0]) {
+            handleGambar(e.dataTransfer.files[0]);
+        }
+    };
+
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         if (e.dataTransfer.files[0]) {
@@ -110,21 +188,36 @@ function UploadQuestionPage() {
     };
 
     const onSubmit = async (data: UploadCSVRequest) => {
-        if (!data.file) return;
+        if (!data.file && !data.existingFile) return;
+        if (!data.gambar && !data.existingGambar) return;
 
         const formData = new FormData();
-        formData.append("file", data.file);
+        if (data.file) {
+            formData.append("file", data.file);
+        }
+
+        if (data.gambar) {
+            formData.append("gambar", data.gambar);
+        }
         formData.append("id_lembaga", data.id_lembaga);
         formData.append("question_set", data.question_set);
         formData.append("tahun_mulai", data.tahun_mulai);
         formData.append("tahun_akhir", data.tahun_akhir);
+        formData.append("label_link", data.label_link);
+        formData.append("link", data.link);
+        formData.append("deskripsi_gambar", data.deskripsi_gambar);
 
         try {
-            await postQuestionSet(formData).unwrap();
+            if (id_qs) {
+                await updateQuestionSet({ id_qs: id_qs, body: formData }).unwrap();
+            }
+            else {
+                await postQuestionSet(formData).unwrap();
+            }
 
             setSnackbar({
                 open: true,
-                message: "Upload berhasil!",
+                message: "Upload successful!",
                 severity: "success",
             });
             setTimeout(() => {
@@ -139,7 +232,7 @@ function UploadQuestionPage() {
                 message:
                     err?.data?.message ||
                     err?.error ||
-                    "Terjadi kesalahan saat upload",
+                    "An error occurred during upload",
                 severity: "error",
             });
         }
@@ -155,20 +248,22 @@ function UploadQuestionPage() {
                     color: 'primary.main',
                 }}
             >
-                Upload Accreditor’s Questions
+                {id_qs ? 'Edit Accreditor’s Questions' : 'Upload Accreditor’s Questions'}
             </Typography>
-            <Grid container spacing={8} mb={3}>
-                <Grid size="auto">
+            
+            {/* Accreditor */}
+            <Grid container mb={3}>
+                <Grid size={2}>
                     <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Accreditor*:</Typography>
                 </Grid>
-                <Grid size={6}>
+                <Grid size={5}>
                     <DropdownInputController
                         name="id_lembaga"
                         control={control}
                         label=""
                         sx={{
                             "& .MuiInputBase-root": {
-                                height: 36,
+                                height: 35,
                             },
                         }}
                     >
@@ -183,12 +278,13 @@ function UploadQuestionPage() {
                     </DropdownInputController>
                 </Grid>
             </Grid>
-            <Grid container spacing={10.5} mb={3}>
-                <Grid size="auto">
+
+            {/* Version */}
+            <Grid container mb={3}>
+                <Grid size={2}>
                     <Typography fontWeight="bold">Version*:</Typography>
                 </Grid>
-
-                <Grid size={5.9}>
+                <Grid size={5}>
                     <TextInputController
                         name="question_set"
                         control={control}
@@ -196,8 +292,9 @@ function UploadQuestionPage() {
                         placeholder="e.g. 1.0"
                         type="number"
                         sx={{
+                            width: '100%',
                             "& .MuiInputBase-root": {
-                                height: 36,
+                                height: 35,
                             },
                         }}
                         inputProps={{
@@ -207,59 +304,203 @@ function UploadQuestionPage() {
                     />
                 </Grid>
             </Grid>
-            <Grid container spacing={4.8} mb={3}>
-                <Grid size="auto">
-                    <Typography fontWeight="bold">Tahun Berlaku*:</Typography>
+
+            {/* Valid Year */}
+            <Grid container mb={3}>
+                <Grid size={2}>
+                    <Typography fontWeight="bold">Valid Year*:</Typography>
                 </Grid>
-                <Grid container spacing={2}>
-                    <Grid size={5}>
-                        <DateInputController
-                            name="tahun_mulai"
-                            control={control}
-                            label=""
-                            displayFormat="YYYY"
-                            dataFormat="YYYY"
-                            views={['year']}
-                            slotProps={{
-                                textField: {
-                                    size: "small",
-                                    sx: {
-                                        "& .MuiInputBase-root": {
-                                            height: 36,
+                <Grid size={5}>
+                    <Grid container alignItems="center">
+                        <Grid size={5.5}>
+                            <DateInputController
+                                name="tahun_mulai"
+                                control={control}
+                                label=""
+                                displayFormat="YYYY"
+                                dataFormat="YYYY"
+                                views={['year']}
+                                slotProps={{
+                                    textField: {
+                                        size: "small",
+                                        sx: {
+                                            "& .MuiInputBase-root": {
+                                                height: 35,
+                                            },
                                         },
                                     },
-                                },
-                            }}
-                        />
-                    </Grid>
-                    <Typography variant="h4">/</Typography>
-                    <Grid size={5}>
-                        <DateInputController
-                            name="tahun_akhir"
-                            control={control}
-                            label=""
-                            displayFormat="YYYY"
-                            dataFormat="YYYY"
-                            views={['year']}
-                            slotProps={{
-                                textField: {
-                                    size: "small",
-                                    sx: {
-                                        "& .MuiInputBase-root": {
-                                            height: 36,
+                                }}
+                            />
+                        </Grid>
+                        <Grid size={1}>
+                            <Typography variant="h4" textAlign="center">/</Typography>
+                        </Grid>
+                        <Grid size={5.5}>
+                            <DateInputController
+                                name="tahun_akhir"
+                                control={control}
+                                label=""
+                                displayFormat="YYYY"
+                                dataFormat="YYYY"
+                                views={['year']}
+                                slotProps={{
+                                    textField: {
+                                        size: "small",
+                                        sx: {
+                                            "& .MuiInputBase-root": {
+                                                height: 35,
+                                            },
                                         },
                                     },
-                                },
-                            }}
-                        />
+                                }}
+                            />
+                        </Grid>
                     </Grid>
                 </Grid>
             </Grid>
-            <Grid container spacing={5}>
-                <Grid size="auto">
+
+            {/* Label Link */}
+            <Grid container mb={3}>
+                <Grid size={2}>
+                    <Typography fontWeight="bold">Label Link*:</Typography>
+                </Grid>
+                <Grid size={5}>
+                    <TextInputController
+                        name="label_link"
+                        control={control}
+                        label=''
+                        placeholder="e.g. Google Drive"
+                        sx={{
+                            width: '100%',
+                            "& .MuiInputBase-root": {
+                                height: 35,
+                            },
+                        }}
+                    />
+                </Grid>
+            </Grid>
+
+            {/* Link URL */}
+            <Grid container mb={3}>
+                <Grid size={2}>
+                    <Typography fontWeight="bold">Link URL*:</Typography>
+                </Grid>
+                <Grid size={5}>
+                    <TextInputController
+                        name="link"
+                        control={control}
+                        label=''
+                        placeholder="https://example.com"
+                        sx={{
+                            width: '100%',
+                            "& .MuiInputBase-root": {
+                                height: 35,
+                            },
+                        }}
+                    />
+                </Grid>
+            </Grid>
+
+            {/* Image */}
+            <Grid container mb={3}>
+                <Grid size={2}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Image*:</Typography>
+                </Grid>
+                <Grid size={5}>
+                    <Paper
+                        variant="outlined"
+                        sx={{
+                            border: "2px dashed black",
+                            p: 4,
+                            textAlign: "center",
+                            cursor: "pointer",
+                        }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={handleDropGambar}
+                    >
+                        {(!gambar && !existingGambar) ? (
+                            <>
+                                <CloudUploadIcon sx={{ fontSize: 40, mb: 1 }} />
+                                <Typography>Drag and Drop image here</Typography>
+                                <Typography variant="body2">or</Typography>
+
+                                <Button
+                                    variant="contained"
+                                    component="label"
+                                    sx={{ mt: 2, backgroundColor: "#5B0000" }}
+                                >
+                                    Select Image
+                                    <input
+                                        hidden
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            if (e.target.files?.[0]) {
+                                                handleGambar(e.target.files[0]);
+                                            }
+                                        }}
+                                    />
+                                </Button>
+                            </>
+                        ) : (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                                <img
+                                    src={gambar ? URL.createObjectURL(gambar) : existingGambar}
+                                    alt="Preview"
+                                    style={{
+                                        maxWidth: "100%",
+                                        maxHeight: 200,
+                                        marginBottom: 10,
+                                        borderRadius: 5,
+                                    }}
+                                />
+
+                                <Button
+                                    onClick={() => {
+                                        setValue("gambar", undefined);
+                                        setValue("existingGambar", undefined);
+                                        setGambar(undefined);
+                                        setExistingGambar('');
+                                    }}
+                                    color="error"
+                                    size="small"
+                                >
+                                    Remove
+                                </Button>
+                            </div>
+                        )}
+                        {formState.errors.gambar && (
+                            <Typography color="error" variant="body2">
+                                {formState.errors.gambar.message}
+                            </Typography>
+                        )}
+                    </Paper>
+                </Grid>
+            </Grid>
+
+            {/* Image Description */}
+            <Grid container mb={3}>
+                <Grid size={2}>
+                    <Typography fontWeight="bold">Image Description*:</Typography>
+                </Grid>
+                <Grid size={5}>
+                    <TextInputController
+                        name="deskripsi_gambar"
+                        control={control}
+                        label=''
+                        multiline
+                        placeholder="Image Description"
+                        sx={{ width: '100%' }}
+                    />
+                </Grid>
+            </Grid>
+
+            {/* Question File */}
+            <Grid container mb={3}>
+                <Grid size={2}>
                     <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Question File*:</Typography>
                 </Grid>
-                <Grid size={6}>
+                <Grid size={5}>
                     <Paper
                         variant="outlined"
                         sx={{
@@ -273,7 +514,7 @@ function UploadQuestionPage() {
                     >
                         <CloudUploadIcon sx={{ fontSize: 40, mb: 1 }} />
 
-                        {!file ? (
+                        {(!file && !existingFile) ? (
                             <>
                                 <Typography>Drag and Drop here</Typography>
                                 <Typography variant="body2">or</Typography>
@@ -281,7 +522,7 @@ function UploadQuestionPage() {
                                 <Button
                                     variant="contained"
                                     component="label"
-                                    sx={{ mt: 2, backgroundColor: "#8B0000" }}
+                                    sx={{ mt: 2, backgroundColor: "#5B0000" }}
                                 >
                                     Select file
                                     <input
@@ -298,13 +539,19 @@ function UploadQuestionPage() {
                             </>
                         ) : (
                             <>
-                                <Typography fontWeight="bold">{file.name}</Typography>
-                                <Typography variant="body2">
-                                    {(file.size / 1024).toFixed(2)} KB
-                                </Typography>
+                                <Typography fontWeight="bold">{file ? file.name : existingFile ? existingFile.name : ''}</Typography>
+                                {file &&
+                                    <Typography variant="body2">
+                                        {(file.size / 1024).toFixed(2)} KB
+                                    </Typography>
+                                }
 
                                 <Button
-                                    onClick={() => setValue("file", undefined)}
+                                    onClick={() => {
+                                        setValue("file", undefined)
+                                        setValue("existingFile", undefined);
+                                        setExistingFile(null);
+                                    }}
                                     color="error"
                                     size="small"
                                     sx={{ mt: 1 }}
@@ -312,6 +559,11 @@ function UploadQuestionPage() {
                                     Remove
                                 </Button>
                             </>
+                        )}
+                        {formState.errors.file && (
+                            <Typography color="error" variant="body2">
+                                {formState.errors.file.message}
+                            </Typography>
                         )}
                     </Paper>
                 </Grid>
@@ -322,8 +574,9 @@ function UploadQuestionPage() {
                 sx={{ mt: 4 }}
                 onClick={handleSubmit(onSubmit)}
             >
-                + Create
+                {id_qs ? 'Update' : '+ Create'}
             </Button>
+            
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={3000}

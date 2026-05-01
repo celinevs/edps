@@ -374,8 +374,8 @@ function FormPage() {
                         py: 3,
                     }}>
                         <Typography variant="h5" fontWeight="bold" sx={{ mb: 3 }}>
-                            {formData?.lembaga == 1 ? q.elemen_penilaian_lam : q.deskripsi_pertanyaan} 
-                            {q.mandatory? '*': ''}
+                            {formData?.lembaga == 1 ? q.elemen_penilaian_lam : q.deskripsi_pertanyaan}
+                            {q.mandatory ? '*' : ''}
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                             <Typography variant="body1" sx={{ fontWeight: 'bold' }}>

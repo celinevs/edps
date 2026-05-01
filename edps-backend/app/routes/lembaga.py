@@ -129,7 +129,13 @@ def get_question_set_by_id(id_qs):
                 "tahun_berlaku": qs.tahun_berlaku,
                 "tanggal_aktif": qs.tanggal_aktif,
                 "status_aktif": qs.status_aktif,
-                "total_max_bobot": qs.total_max_bobot
+                "total_max_bobot": qs.total_max_bobot,
+                "label_link": qs.label_link,
+                "link": qs.link,
+                "gambar_path": qs.gambar_path,
+                "deskripsi_gambar": qs.deskripsi_gambar,
+                "csv_path": qs.csv_path,
+                "csv_name": qs.csv_name,
             },
             message="Question set retrieved successfully"
         )

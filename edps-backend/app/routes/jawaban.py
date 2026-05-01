@@ -414,8 +414,7 @@ def review_assesor():
         akreditasi.update_totals()
         akreditasi.update_progress()
         
-        if is_submit:
-            akreditasi.status = "Reviewed"
+        akreditasi.status = "Reviewed" if is_submit else "Reviewing"
             
         akreditasi.tanggal_review = datetime.utcnow()
 

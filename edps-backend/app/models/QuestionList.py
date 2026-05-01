@@ -9,6 +9,7 @@ class LamInfokom(db.Model):
     q_no = db.Column(db.Integer)
     kode_kriteria = db.Column(db.String(50), nullable=False)
     kriteria = db.Column(db.Text)
+    jenis = db.Column(db.Enum('I', 'P', 'O'))
     elemen_penilaian_lam = db.Column(db.Text)
     deskripsi_pertanyaan = db.Column(db.Text)
     bobot = db.Column(db.Float)

@@ -54,7 +54,7 @@ function SubmitDialog(props: SubmitDialogProps) {
                     message: 'Evaluasi berhasil disimpan!',
                     severity: 'success'
                 });
-                router.push("/dashboard")
+                router.back();
             } catch (error) {
                 console.error("Error submitting quiz:", error);
                 setSnackbar({
@@ -99,7 +99,7 @@ function SubmitDialog(props: SubmitDialogProps) {
                     message: 'Evaluasi berhasil disubmit!',
                     severity: 'success'
                 });
-                router.push("/dashboard");
+                router.back();
             } catch (error) {
                 console.error("Error submitting quiz:", error);
                 setSnackbar({

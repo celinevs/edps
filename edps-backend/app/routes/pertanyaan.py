@@ -1,4 +1,4 @@
-from flask import Blueprint, request
+from flask import Blueprint, request, send_file, make_response, send_from_directory
 from app import db
 # from app.models import Pertanyaan, Regulasi, IndikatorJawaban, VersiRegulasi
 from app.models.QuestionSet import QuestionSet
@@ -10,6 +10,12 @@ import pandas as pd
 from flask_jwt_extended import jwt_required
 from datetime import datetime
 from sqlalchemy import exists
+import os
+from werkzeug.utils import secure_filename
+import mimetypes
+from flask_cors import cross_origin
+
+UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "/app/uploads")
 
 pertanyaan_bp = Blueprint("pertanyaan", __name__)
 
@@ -95,15 +101,20 @@ def get_pertanyaan_by_qs(id_qs):
         return handle_exception(e)
 
 @pertanyaan_bp.route("/pertanyaan/import-csv", methods=["POST"])
+@role_required('ADMIN', 'SUPERADMIN')
 @jwt_required()
 def import_question_csv():
     try:
         file = request.files['file']
+        gambar = request.files['gambar']
 
         id_lembaga = int(request.form.get("id_lembaga"))
         question_set_version = float(request.form.get("question_set"))
         tahun_mulai = request.form.get("tahun_mulai")
         tahun_akhir = request.form.get("tahun_akhir")
+        label_link = request.form.get("label_link")
+        link = request.form.get("link")
+        deskripsi_gambar = request.form.get("deskripsi_gambar")
 
         existing = QuestionSet.query.filter(
             QuestionSet.id_lembaga == id_lembaga,
@@ -115,13 +126,30 @@ def import_question_csv():
                 "Question set version already exists for this institution",
                 400
             )
+        
+        filename = secure_filename(file.filename)
+        path = os.path.join(UPLOAD_FOLDER, filename)
+
+        gambar_path = None
+        if gambar:
+            gambar_filename = secure_filename(gambar.filename)
+            gambar_path = os.path.join(UPLOAD_FOLDER, gambar_filename)
+            os.makedirs(os.path.dirname(gambar_path), exist_ok=True)
+            gambar.save(gambar_path)
 
         qs = QuestionSet(
             id_lembaga=id_lembaga,
             question_set=question_set_version,
             tahun_berlaku=f'{tahun_mulai}/{tahun_akhir}',
             tanggal_aktif=datetime.utcnow(),
-            status_aktif=True
+            status_aktif=True,
+            csv_path = path,
+            csv_name = filename,
+
+            label_link=label_link,
+            link=link,
+            gambar_path=gambar_path,
+            deskripsi_gambar=deskripsi_gambar
         )
 
         db.session.add(qs)
@@ -145,9 +173,42 @@ def import_question_csv():
                 f"Duplicate q_no found in file: {dup}",
                 400
             )
+        
+        if qs.id_lembaga == 1:
+            required_columns = [
+                "q_no",
+                "kode_kriteria",
+                "kriteria",
+                "elemen_penilaian_lam",
+                "deskripsi_pertanyaan",
+                "bobot",
+                "jawaban_1",
+                "jawaban_2",
+                "jawaban_3",
+                "jawaban_4"
+                ]
+        elif qs.id_lembaga == 2:
+            required_columns = [
+                "q_no",
+                "kode_kriteria",
+                "dimensi",
+                "deskripsi_pertanyaan",
+                "bobot",
+                "mandatory"
+                ]
+        
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            return error_response(f"Invalid file format. Missing required columns: {missing_columns}", 400)
 
-        for _, row in df.iterrows():
+        for index, row in df.iterrows():
             if id_lembaga == 1:
+                if pd.isnull(row.get("q_no")):
+                    return error_response(f"Row {index+1}: q_no is required", 400)
+                
+                if pd.isnull(row.get("bobot")):
+                    return error_response(f"Row {index+1}: bobot is required", 400)
+                
                 pertanyaan = LamInfokom(
                     id_qs=qs.id_qs,
                     q_no=int(row.get("q_no")),
@@ -155,6 +216,7 @@ def import_question_csv():
                     kriteria=row.get("kriteria"),
                     elemen_penilaian_lam=row.get("elemen_penilaian_lam"),
                     deskripsi_pertanyaan=row.get("deskripsi_pertanyaan"),
+                    jenis = row.get('jenis'),
                     bobot=float(row.get("bobot", 0)),
                     jawaban_1=row.get("jawaban_1"),
                     jawaban_2=row.get("jawaban_2"),
@@ -163,6 +225,11 @@ def import_question_csv():
                 )
 
             elif id_lembaga == 2:
+                mandatory_val = str(row.get("mandatory")).lower()
+                if mandatory_val not in ["true", "false"]:
+                    return error_response(
+                        f"Row {index+1}: mandatory must be 'true' or 'false'", 400)
+                
                 pertanyaan = LamEmba(
                     id_qs=qs.id_qs,
                     q_no=int(row.get("q_no")),
@@ -175,8 +242,8 @@ def import_question_csv():
 
             db.session.add(pertanyaan)
             inserted += 1
-
         qs.update_total_max_bobot()
+        file.save(path)
 
         db.session.commit()
 
@@ -193,6 +260,7 @@ def import_question_csv():
         return handle_exception(e)
 
 @pertanyaan_bp.route("/pertanyaan/import-csv/<id_qs>", methods=["PUT"])
+@role_required('ADMIN', 'SUPERADMIN')
 @jwt_required()
 def update_question_csv(id_qs):
     try:
@@ -201,6 +269,10 @@ def update_question_csv(id_qs):
             return error_response("Question set not found", 404)
         
         new_version = float(request.form.get("question_set", qs.question_set))
+        label_link = request.form.get("label_link")
+        link = request.form.get("link")
+        deskripsi_gambar = request.form.get("deskripsi_gambar")
+        gambar = request.files.get("gambar")
         
         existing = QuestionSet.query.filter(
             QuestionSet.id_lembaga == qs.id_lembaga,
@@ -214,17 +286,18 @@ def update_question_csv(id_qs):
                 400
             )
 
-        file = request.files['file']
+        file = request.files.get('file')
 
+        old_path = qs.csv_path
         qs.question_set = new_version
         qs.tahun_berlaku = request.form.get("tahun_berlaku", qs.tahun_berlaku)
 
-        if file.filename.endswith('.xlsx'):
-            df = pd.read_excel(file)
-        elif file.filename.endswith('.csv'):
-            df = pd.read_csv(file)
-        else:
-            return error_response("File format must be .csv or .xlsx", 400)
+        qs.label_link = label_link or qs.label_link
+        qs.link = link or qs.link
+        qs.deskripsi_gambar = deskripsi_gambar or qs.deskripsi_gambar
+
+        if gambar:
+            gambar.save(qs.gambar_path)
 
         is_used = db.session.query(
             exists().where(Akreditasi.id_qs == id_qs)
@@ -235,39 +308,72 @@ def update_question_csv(id_qs):
                 "Question set is already used in accreditation and cannot be modified",
                 400
             )
+        
+        if file:
+            qs.csv_name = file.filename
 
-        if df["q_no"].duplicated().any():
-            dup = df[df["q_no"].duplicated()]["q_no"].tolist()
-            return error_response(
-                f"Duplicate q_no found in file: {dup}",
-                400
-            )
-
-        if qs.id_lembaga == 1:
-            LamInfokom.query.filter_by(id_qs=id_qs).delete()
-        elif qs.id_lembaga == 2:
-            LamEmba.query.filter_by(id_qs=id_qs).delete()
-
-        inserted = 0
-
-        for _, row in df.iterrows():
+            if file.filename.endswith('.xlsx'):
+                df = pd.read_excel(file)
+            elif file.filename.endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                return error_response("File format must be .csv or .xlsx", 400)
+            
+            if df["q_no"].duplicated().any():
+                dup = df[df["q_no"].duplicated()]["q_no"].tolist()
+                return error_response(f"Duplicate q_no found in file: {dup}",400)
+            
             if qs.id_lembaga == 1:
-                pertanyaan = LamInfokom(
+                required_columns = [
+                "q_no",
+                "kode_kriteria",
+                "kriteria",
+                "elemen_penilaian_lam",
+                "deskripsi_pertanyaan",
+                "bobot",
+                "jawaban_1",
+                "jawaban_2",
+                "jawaban_3",
+                "jawaban_4"
+                ]
+            elif qs.id_lembaga == 2:
+                required_columns = [
+                "q_no",
+                "kode_kriteria",
+                "dimensi",
+                "deskripsi_pertanyaan",
+                "bobot",
+                "mandatory"
+                ]
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                return error_response(f"Invalid file format. Missing required columns: {missing_columns}", 400)
+            
+            if qs.id_lembaga == 1:
+                LamInfokom.query.filter_by(id_qs=id_qs).delete()
+            
+            elif qs.id_lembaga == 2:
+                LamEmba.query.filter_by(id_qs=id_qs).delete()
+            
+            inserted = 0
+            for _, row in df.iterrows():
+                if qs.id_lembaga == 1:
+                    pertanyaan = LamInfokom(
                     id_qs=id_qs,
                     q_no=int(row.get("q_no")),
                     kode_kriteria=row.get("kode_kriteria"),
                     kriteria=row.get("kriteria"),
                     elemen_penilaian_lam=row.get("elemen_penilaian_lam"),
                     deskripsi_pertanyaan=row.get("deskripsi_pertanyaan"),
+                    jenis = row.get('jenis'),
                     bobot=float(row.get("bobot", 0)),
                     jawaban_1=row.get("jawaban_1"),
                     jawaban_2=row.get("jawaban_2"),
                     jawaban_3=row.get("jawaban_3"),
                     jawaban_4=row.get("jawaban_4"),
                 )
-
-            elif qs.id_lembaga == 2:
-                pertanyaan = LamEmba(
+                elif qs.id_lembaga == 2:
+                    pertanyaan = LamEmba(
                     id_qs=id_qs,
                     q_no=int(row.get("q_no")),
                     kode_kriteria=row.get("kode_kriteria"),
@@ -276,23 +382,52 @@ def update_question_csv(id_qs):
                     bobot=float(row.get("bobot", 1)),
                     mandatory=str(row.get("mandatory")).lower() == "true"
                 )
+                db.session.add(pertanyaan)
+                inserted += 1
 
-            db.session.add(pertanyaan)
-            inserted += 1
-
-        # update aggregate
-        qs.update_total_max_bobot()
+            qs.update_total_max_bobot()
+            file.save(old_path)
 
         db.session.commit()
 
+
         return success_response(
-            data={
-                "id_qs": id_qs,
-                "inserted": inserted
-            },
+            data= None,
             message="Question set successfully updated"
         )
 
     except Exception as e:
         db.session.rollback()
         return handle_exception(e)
+
+#THIS IS FOR DEVELOPMENT ONLY, DELETE THIS WHEN PRODUCTION
+@pertanyaan_bp.route("/uploads/<path:filename>")
+def serve_uploads(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+#---------------------------------------------------------
+
+@pertanyaan_bp.route("/pertanyaan/download-csv/<id_qs>", methods=["GET"])
+@cross_origin(expose_headers=["Content-Disposition"])
+def download_csv(id_qs):
+
+    qs = QuestionSet.query.get(id_qs)
+
+    if not qs:
+        return error_response("Question set not found", 404)
+
+    if not os.path.exists(qs.csv_path):
+        return error_response("File not found", 404)
+    
+    mime_type, _ = mimetypes.guess_type(qs.csv_path)
+
+    response = make_response(send_file(
+        qs.file_path,
+        as_attachment=True,
+        mimetype=mime_type or "application/octet-stream",
+        download_name=qs.csv_name
+    ))
+
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Cache-Control"] = "no-store"
+
+    return response

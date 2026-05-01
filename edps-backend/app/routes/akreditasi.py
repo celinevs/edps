@@ -177,6 +177,32 @@ def get_akreditasi():
     except Exception as e:
         return handle_exception(e)
 
+@akreditasi_bp.route("/akreditasi/<id_akreditasi>", methods=["GET"])
+@jwt_required()
+def get_akreditasi_help(id_akreditasi):
+    try:
+        qs = Akreditasi.query.get(id_akreditasi)
+
+        if not qs:
+            return error_response("Question set not found", 404)
+
+        return success_response(
+            data={
+                "email_pengisi": qs.pengisi.email if qs.pengisi else None,
+                "email_validator": qs.validator.email if qs.validator else None,
+                "tanggal_pengisian": qs.tanggal_pengisian,
+                "tanggal_validasi": qs.tanggal_validasi,
+                "label_link": qs.question_set.label_link,
+                "link": qs.question_set.link,
+                "gambar_path": qs.question_set.gambar_path,
+                "deskripsi_gambar": qs.question_set.deskripsi_gambar,
+            },
+            message="Question set retrieved successfully"
+        )
+
+    except Exception as e:
+        return handle_exception(e)
+
 @akreditasi_bp.route('/akreditasi/dropdown', methods=["GET"])
 @jwt_required()
 def get_akreditasi_dropdown():

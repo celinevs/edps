@@ -15,8 +15,10 @@ class QuestionSet(db.Model):
 
     label_link = db.Column(db.String(255), nullable=True)
     link = db.Column(db.String(255), nullable=True)
-    gambar_indikator = db.Column(db.String(255), nullable=True) 
+    gambar_path = db.Column(db.String(255), nullable=True) 
     deskripsi_gambar = db.Column(db.String(255), nullable=True)
+    csv_path = db.Column(db.String(255), nullable=True) 
+    csv_name = db.Column(db.String(255), nullable=True) 
 
     lembaga = db.relationship("Lembaga", back_populates="question_set")
     lam_infokom = db.relationship("LamInfokom", back_populates="question_set", cascade="all, delete-orphan")

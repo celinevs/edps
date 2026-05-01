@@ -7,6 +7,12 @@ export interface QuestionSetItem {
   total_max_bobot: number;
   tanggal_aktif: string;
   can_edit: boolean;
+  label_link?: string;
+  link?: string;
+  deskripsi_gambar?: string;
+  gambar_path?: string;
+  csv_path?: string;
+  csv_name?: string;
 }
 
 export interface GetQuestionSet {

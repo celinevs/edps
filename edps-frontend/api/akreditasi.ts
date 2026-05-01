@@ -6,7 +6,8 @@ import {
   AkreditasiRequest,
   DashboardInfokom,
   Akreditasi,
-  DashboardEmba
+  DashboardEmba,
+  AkreditasiHelp
 } from "@/model/Akreditasi";
 
 export const addTagTypes = ["akreditasi"];
@@ -87,7 +88,16 @@ export const akreditasiApi = baseApi
         }),
         invalidatesTags: ["akreditasi"],
       }),
-
+      getAkreditasiHelpId: builder.mutation<
+        APIResponse<AkreditasiHelp>,
+        string
+      >({
+        query: (id_akreditasi) => ({
+          url: `/akreditasi/${id_akreditasi}`,
+          method: "GET",
+        }),
+        invalidatesTags: ["akreditasi"],
+      }),
       getWeightSummaryInfokom: builder.query<
         APIResponse<WeightSummary>,
         string
@@ -161,5 +171,6 @@ export const {
   useGetDashboardInfokomDetailQuery,
   useLazyGetDashboardInfokomQuery,
   useGetDashboardEmbaDetailQuery,
-  useLazyGetDashboardEmbaDetailQuery
+  useLazyGetDashboardEmbaDetailQuery,
+  useGetAkreditasiHelpIdMutation
 } = akreditasiApi;

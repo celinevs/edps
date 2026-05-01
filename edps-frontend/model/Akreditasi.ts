@@ -170,3 +170,14 @@ export interface DashboardEmba {
   radar: Chart;
   bar: Chart;
 }
+
+export interface AkreditasiHelp {
+    tanggal_pengisian: string;
+    tanggal_validasi: string;
+    email_pengisi: string;
+    email_validator: string;
+    label_link?: string;
+    link?: string;
+    deskripsi_gambar?: string;
+    gambar_path?: string;
+}

@@ -22,8 +22,8 @@ function HomePage() {
     const [perPage, setPerPage] = useState(5)
     const [akreditasi, setAkreditasi] = useState<Akreditasi[]>([])
     const [summary, setSummary] = useState<Summary>()
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
-    const isUPPS = user?.role === 'UPPS'
+    const isAdmin = user?.role === 'ADMIN';
+    const isUPPS = user?.role === 'UPPS' || user?.role === 'SUPERADMIN';
     const { data } = useGetAkreditasiQuery({
         page: page + 1,
         per_page: perPage,
@@ -35,10 +35,13 @@ function HomePage() {
         });
     const columnVisibility = {
         admin: {
-            hidden: ['actions', 'tanggal_validasi', 'status']
+            hidden: ['actions', 'tanggal_validasi', 'status', 'status_assesor', 'fakultas']
+        },
+        upps: {
+             hidden: ['actions', 'tanggal_validasi', 'status', 'fakultas']
         },
         nonAdmin: {
-            hidden: ['status_prodi', 'status_lpmi']
+            hidden: ['status_prodi', 'status_lpmi', 'status_assesor']
         }
     };
 
@@ -107,6 +110,11 @@ function HomePage() {
             render: (row) => row.status == 'In Progress' ? 'Awaiting Submission' : row.status == 'Reviewed' ? 'Validated' : row.status,
         },
         {
+            id: 'status_assesor',
+            label: 'Assesor Status',
+            render: (row) => ['Submitted', 'In Progress', 'Validating', 'Validated'].includes(row.status) ? 'Awaiting Submission' : row.status,
+        },
+        {
             id: 'progress',
             label: 'Current Progress',
             minWidth: 150,
@@ -154,7 +162,12 @@ function HomePage() {
         if (isAdmin) {
             const hidden = columnVisibility.admin?.hidden || [];
             return !hidden.includes(col.id as string);
-        } else {
+        }
+        else if (isUPPS) {
+            const hidden = columnVisibility.upps?.hidden || [];
+            return !hidden.includes(col.id as string);
+        }
+        else {
             const hidden = columnVisibility.nonAdmin?.hidden || [];
             return !hidden.includes(col.id as string);
         }
@@ -221,7 +234,6 @@ function HomePage() {
                 totalData={totalData}
                 handleChangePage={handleChangePage}
                 handleChangeRowsPerPage={handleChangeRowsPerPage}
-                showRowNumber={true}
             />
         </>
     )

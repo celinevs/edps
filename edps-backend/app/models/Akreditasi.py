@@ -26,7 +26,7 @@ class Akreditasi(db.Model):
     id_pengisi = db.Column(db.String(36), db.ForeignKey("users.id_user"), nullable=True)
     id_validator = db.Column(db.String(36), db.ForeignKey("users.id_user"), nullable=True)
     
-    status = db.Column(db.Enum('Submitted', 'Reviewed', 'In Progress', 'Validating', 'Validated'),  default='In Progress')
+    status = db.Column(db.Enum('Submitted', 'Reviewed', 'In Progress', 'Validating', 'Validated', 'Reviewing'),  default='In Progress')
     
     total_skor_lpmi = db.Column(db.Float, default=0, nullable=False)
     total_skor_prodi = db.Column(db.Float, default=0, nullable=False)

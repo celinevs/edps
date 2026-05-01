@@ -56,6 +56,17 @@ export const questionSetApi = baseApi
         }),
         invalidatesTags: ["question-set"],
       }),
+      updateQuestionSet: builder.mutation<
+        APIResponse<any>,
+        {id_qs: string, body: FormData}
+      >({
+        query: ({id_qs, body}) => ({
+          url: `/pertanyaan/import-csv/${id_qs}`,
+          method: "PUT",
+          body,
+        }),
+        invalidatesTags: ["question-set"],
+      }),
 
     }),
   });
@@ -66,5 +77,6 @@ export const {
   useGetQuestionSetPaginatedQuery,
   useLazyGetQuestionSetPaginatedQuery,
   usePostQuestionSetMutation,
-  useGetQuestionSetIDMutation
+  useGetQuestionSetIDMutation,
+  useUpdateQuestionSetMutation
 } = questionSetApi;

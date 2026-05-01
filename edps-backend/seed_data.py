@@ -136,22 +136,22 @@ def seed_data():
             status_aktif=True
         ))
     
-    Prodi(
+    prodi_objects.append(Prodi(
             id_prodi=str(uuid.uuid4()),
             kode_prodi='TEST1',
             nama_prodi='Infokom Only',
             id_fakultas=fakultas_bisnis.id_fakultas,
             lembaga_ids=[1], 
             status_aktif=True
-        )
-    Prodi(
+        ))
+    prodi_objects.append(Prodi(
             id_prodi=str(uuid.uuid4()),
             kode_prodi='TEST2',
             nama_prodi='Emba Only',
             id_fakultas=fakultas_bisnis.id_fakultas,
             lembaga_ids=[2], 
             status_aktif=True
-        )
+        ))
 
     db.session.add_all(prodi_objects)
     db.session.commit()
@@ -212,6 +212,7 @@ def seed_data():
             q_no=q["q_no"],
             kode_kriteria=q["kode"],
             kriteria=q["kriteria"],
+            jenis = 'I',
             elemen_penilaian_lam=q["elemen"],
             deskripsi_pertanyaan=q["deskripsi"],
             bobot=q["bobot"],
