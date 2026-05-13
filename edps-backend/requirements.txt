@@ -9,3 +9,5 @@ authlib
 redis
 requests
 pandas
+joblib
+scikit-learn

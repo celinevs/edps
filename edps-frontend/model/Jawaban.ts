@@ -23,6 +23,25 @@ export interface JawabanUser {
   files: FileJawaban[];
 }
 
+export interface EmbaDosen {
+  id_akreditasi?: string;
+  user_role?: string;
+
+  dosen_total?: number;
+  dosen_tetap?: number;
+  dosen_doktor?: number;
+  dosen_magister?: number;
+  dosen_guru_besar?: number;
+  dosen_lektor_kepala?: number;
+  dosen_lektor?: number;
+  dosen_publikasi?: number;
+  dosen_sertifikat?: number;
+
+  evaluasi_integrasi?: string;
+  rekomendasi_ak?: string;
+  catatan_assesor?: string;
+}
+
 export interface JawabanRequestItem {
   q_no: number;
   jawaban: number;
@@ -37,16 +56,17 @@ export interface ValidationRequestItem {
 export interface GetJawabanUser {
     jumlah_jawaban: number;
     jawaban: JawabanUser[];
-    periode_info: {
-      total_skor_prodi: number;
-      total_skor_lpmi: number;
-    }
+    emba_dosen: EmbaDosen[];
+    evaluasi_integrasi?: string;
+    rekomendasi_ak?: string;
+    catatan_assesor: string;
 }
 
 export interface SubmitJawabanRequest {
   id_akreditasi: string;
   id_qs: string;
   jawaban: JawabanRequestItem[];
+  dosen?: EmbaDosen;
   is_submit?: boolean;
 }
 
@@ -55,10 +75,19 @@ export interface SubmitValidationRequest {
   id_qs: string;
   jawaban: ValidationRequestItem[];
   is_submit?: boolean;
+  evaluasi_integrasi?: string;
+  rekomendasi_ak?: string;
+  catatan_assesor?: string;
 }
 
 export interface UploadRequestItem {
   id_pertanyaan: string;
   id_periode: string;
   file: File;
+}
+
+export interface EmbaNotes {
+    evaluasi_integrasi?: string;
+    rekomendasi_ak?: string;
+    catatan_assesor: string;
 }

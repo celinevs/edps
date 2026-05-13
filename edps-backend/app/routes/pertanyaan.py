@@ -56,6 +56,7 @@ def get_pertanyaan_by_qs(id_qs):
                 "id_pertanyaan": p.id_qinfokom,
                 "deskripsi_pertanyaan": p.deskripsi_pertanyaan,
                 "bobot": p.bobot,
+                "no_kriteria": p.no_kriteria,
                 "kode_kriteria": p.kode_kriteria,
                 "kriteria": p.kriteria,
                 "elemen_penilaian_lam": p.elemen_penilaian_lam,
@@ -70,6 +71,7 @@ def get_pertanyaan_by_qs(id_qs):
                     "id_pertanyaan": p.id_qemba,
                     "deskripsi_pertanyaan": p.deskripsi_pertanyaan,
                     "bobot": p.bobot,
+                    "no_butir": p.no_butir,
                     "kode_kriteria": p.kode_kriteria,
                     "kriteria": p.kriteria,
                     'mandatory': p.mandatory,
@@ -177,8 +179,10 @@ def import_question_csv():
         if qs.id_lembaga == 1:
             required_columns = [
                 "q_no",
+                "no_butir",
                 "kode_kriteria",
                 "kriteria",
+                "jenis",
                 "elemen_penilaian_lam",
                 "deskripsi_pertanyaan",
                 "bobot",
@@ -190,10 +194,11 @@ def import_question_csv():
         elif qs.id_lembaga == 2:
             required_columns = [
                 "q_no",
+                "no_butir",
                 "kode_kriteria",
+                "kriteria",
                 "dimensi",
                 "deskripsi_pertanyaan",
-                "bobot",
                 "mandatory"
                 ]
         
@@ -209,9 +214,12 @@ def import_question_csv():
                 if pd.isnull(row.get("bobot")):
                     return error_response(f"Row {index+1}: bobot is required", 400)
                 
+                row = row.where(pd.notnull(row), None)
+                
                 pertanyaan = LamInfokom(
                     id_qs=qs.id_qs,
                     q_no=int(row.get("q_no")),
+                    no_kriteria = row.get("no_butir"),
                     kode_kriteria=row.get("kode_kriteria"),
                     kriteria=row.get("kriteria"),
                     elemen_penilaian_lam=row.get("elemen_penilaian_lam"),
@@ -233,8 +241,10 @@ def import_question_csv():
                 pertanyaan = LamEmba(
                     id_qs=qs.id_qs,
                     q_no=int(row.get("q_no")),
+                    no_butir = row.get("no_butir"),
                     kode_kriteria=row.get("kode_kriteria"),
-                    kriteria=row.get("dimensi"),
+                    kriteria=row.get("kriteria"),
+                    dimensi=row.get("dimensi"),
                     deskripsi_pertanyaan=row.get("deskripsi_pertanyaan"),
                     bobot=float(row.get("bobot", 1)),
                     mandatory=str(row.get("mandatory")).lower() == "true"
@@ -400,7 +410,7 @@ def update_question_csv(id_qs):
         db.session.rollback()
         return handle_exception(e)
 
-#THIS IS FOR DEVELOPMENT ONLY, DELETE THIS WHEN PRODUCTION
+#THIS IS FOR DEVELOPMENT ONLY, MODIFY THIS WHEN PRODUCTION
 @pertanyaan_bp.route("/uploads/<path:filename>")
 def serve_uploads(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)

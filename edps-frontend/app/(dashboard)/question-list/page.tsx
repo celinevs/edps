@@ -35,6 +35,7 @@ function QuestionListPage() {
 
     const columns: Column<QuestionSetItem>[] = [
         { id: 'nama_lembaga', label: 'Accreditor' },
+        { id: 'versi', label: 'Version' },
         {
             id: 'tanggal_aktif',
             label: 'Active Date',

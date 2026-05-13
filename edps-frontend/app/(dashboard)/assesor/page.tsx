@@ -18,6 +18,7 @@ function AssesorPage() {
     const { data } = useGetAkreditasiQuery({
         page: page + 1,
         per_page: perPage,
+        is_assesor_page: true
     });
 
     useEffect(() => {

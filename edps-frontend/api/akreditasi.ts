@@ -29,8 +29,11 @@ export const akreditasiApi = baseApi
           fakultas?: string;
           id_qs?: string;
           id_prodi?: string;
+          id_lembaga?: number;
           available?: boolean;
           only_null_assesor?: boolean;
+          is_assesor_page?: boolean;
+          is_home_page?: boolean;
         }
       >({
         query: (params) => ({
@@ -152,6 +155,16 @@ export const akreditasiApi = baseApi
         }),
         providesTags: ["akreditasi"],
       }),
+      getDashboardML: builder.query<
+        APIResponse<any>,
+        void
+      >({
+        query: () => ({
+          url: `/ml-dashboard`,
+          method: "GET",
+        }),
+        providesTags: ["akreditasi"],
+      }),
     }),
   });
 
@@ -172,5 +185,7 @@ export const {
   useLazyGetDashboardInfokomQuery,
   useGetDashboardEmbaDetailQuery,
   useLazyGetDashboardEmbaDetailQuery,
-  useGetAkreditasiHelpIdMutation
+  useGetAkreditasiHelpIdMutation,
+  useGetDashboardMLQuery,
+  useLazyGetDashboardMLQuery
 } = akreditasiApi;

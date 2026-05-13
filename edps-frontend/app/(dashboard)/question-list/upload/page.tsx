@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useGetLembagaQuery } from "@/api/lembaga";
+import { downloadCSV } from "@/api/downloadApi";
 import { usePostQuestionSetMutation, useGetQuestionSetIDMutation, useUpdateQuestionSetMutation } from "@/api/questionSet";
 import { Lembaga } from "@/model/Lembaga";
 import {
@@ -250,7 +251,7 @@ function UploadQuestionPage() {
             >
                 {id_qs ? 'Edit Accreditor’s Questions' : 'Upload Accreditor’s Questions'}
             </Typography>
-            
+
             {/* Accreditor */}
             <Grid container mb={3}>
                 <Grid size={2}>
@@ -539,7 +540,40 @@ function UploadQuestionPage() {
                             </>
                         ) : (
                             <>
-                                <Typography fontWeight="bold">{file ? file.name : existingFile ? existingFile.name : ''}</Typography>
+                                <Typography
+                                    sx={{
+                                        color: "primary.main",
+                                        cursor: "pointer",
+                                        textDecoration: "underline",
+                                    }}
+                                    onClick={() => {
+                                        // Newly uploaded file (not saved yet)
+                                        if (file) {
+                                            const url = URL.createObjectURL(file);
+
+                                            const link = document.createElement("a");
+                                            link.href = url;
+                                            link.download = file.name;
+
+                                            document.body.appendChild(link);
+                                            link.click();
+
+                                            link.remove();
+                                            URL.revokeObjectURL(url);
+                                        }
+
+                                        // Existing file from edit mode
+                                        else if (existingFile && id_qs) {
+                                            downloadCSV(id_qs);
+                                        }
+                                    }}
+                                >
+                                    {file
+                                        ? file.name
+                                        : existingFile
+                                            ? existingFile.name
+                                            : ""}
+                                </Typography>
                                 {file &&
                                     <Typography variant="body2">
                                         {(file.size / 1024).toFixed(2)} KB
@@ -548,8 +582,10 @@ function UploadQuestionPage() {
 
                                 <Button
                                     onClick={() => {
-                                        setValue("file", undefined)
-                                        setValue("existingFile", undefined);
+                                        setValue("file", undefined, { shouldValidate: true });
+                                        setValue("existingFile", undefined, { shouldValidate: true });
+
+                                        setFile(undefined);
                                         setExistingFile(null);
                                     }}
                                     color="error"
@@ -576,7 +612,7 @@ function UploadQuestionPage() {
             >
                 {id_qs ? 'Update' : '+ Create'}
             </Button>
-            
+
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={3000}
@@ -587,6 +623,7 @@ function UploadQuestionPage() {
                     onClose={() => setSnackbar({ ...snackbar, open: false })}
                     severity={snackbar.severity}
                     sx={{ width: '100%' }}
+                    variant="filled"
                 >
                     {snackbar.message}
                 </Alert>

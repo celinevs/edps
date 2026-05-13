@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from 'react';
 import CloseIcon from '@mui/icons-material/Close';
 import { useSubmitJawabanMutation, useSubmitValidationMutation, useSubmitReviewMutation } from '@/api/jawaban';
-import { JawabanRequestItem, ValidationRequestItem} from '@/model/Jawaban';
+import { EmbaDosen, EmbaNotes, JawabanRequestItem, ValidationRequestItem} from '@/model/Jawaban';
 import { Pertanyaan } from '@/model/Pertanyaan';
 
 interface SubmitDialogProps {
@@ -15,12 +15,14 @@ interface SubmitDialogProps {
     id_regulasi: string;
     jawaban: JawabanRequestItem[] | ValidationRequestItem[];
     pertanyaan: Pertanyaan[];
+    dosen?: EmbaDosen;
     role?: 'prodi' | 'lpmi' | 'assesor'
+    recapData?: EmbaNotes;
 
 }
 
 function SubmitDialog(props: SubmitDialogProps) {
-    const { open, onClose, id_periode, jawaban, pertanyaan, role, id_regulasi } = props;
+    const { open, onClose, id_periode, jawaban, pertanyaan, role, id_regulasi, dosen, recapData } = props;
     const [submitJawaban] = useSubmitJawabanMutation();
     const [submitValidation] = useSubmitValidationMutation();
     const [submitReview] = useSubmitReviewMutation();
@@ -39,6 +41,10 @@ function SubmitDialog(props: SubmitDialogProps) {
                     id_akreditasi: id_periode,
                     id_qs: id_regulasi,
                     jawaban: jawaban,
+                    dosen: dosen,
+                    evaluasi_integrasi: recapData?.evaluasi_integrasi || '',
+                    rekomendasi_ak: recapData?.rekomendasi_ak || '',
+                    catatan_assesor: recapData?.catatan_assesor || '',
                 };
                 if (role == 'prodi') {
                     await submitJawaban(payload).unwrap();
@@ -159,6 +165,7 @@ function SubmitDialog(props: SubmitDialogProps) {
                 <Alert
                     onClose={() => setSnackbar({ ...snackbar, open: false })}
                     severity={snackbar.severity}
+                    variant="filled"
                     sx={{ width: '100%' }}
                 >
                     {snackbar.message}

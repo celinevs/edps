@@ -5,7 +5,7 @@ import { useAuth } from "@/app/service/hooks/useAuth";
 import { Akreditasi, DashboardInfokom, TableItem, TableItem2, DashboardEmba } from "@/model/Akreditasi";
 import { Lembaga } from "@/model/Lembaga";
 import { GetProdi } from "@/model/Prodi";
-import { useLazyGetDashboardEmbaDetailQuery, useLazyGetDashboardInfokomDetailQuery, useGetAkreditasiDropdownQuery } from "@/api/akreditasi";
+import { useLazyGetDashboardEmbaDetailQuery, useLazyGetDashboardInfokomDetailQuery, useGetAkreditasiDropdownQuery} from "@/api/akreditasi";
 import { useGetLembagaQuery } from "@/api/lembaga";
 import { useLazyGetProdiQuery } from "@/api/prodi";
 import {
@@ -28,6 +28,17 @@ import { RadarChart } from '@mui/x-charts/RadarChart';
 import { BarChart } from "@mui/x-charts";
 import NoPaginationTable, { Column } from "@/app/component/table/NoPaginationTable";
 
+const heatmapColor = (value: number) => {
+  if (value < 0) return "#e53935";
+
+  if (value >= 1) return "#2e7d32";
+  if (value >= 0.5) return "#66bb6a";
+  if (value > 0) return "#cddc39";
+
+  // Neutral
+  return "#9e9e9e";
+};
+
 function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth()
   const [dashboardInfokom, setDashboardInfokom] = useState<DashboardInfokom>();
@@ -43,6 +54,7 @@ function DashboardPage() {
   const [getDashboardEmba] = useLazyGetDashboardEmbaDetailQuery();
   const { data: lembagaData } = useGetLembagaQuery(selectedProdi);
   const { data: akreditasiData } = useGetAkreditasiDropdownQuery({ id_prodi: selectedProdi, id_lembaga: selectedLembaga });
+  const dashboardData = dashboardInfokom || dashboardEmba;
 
   useEffect(() => {
     if (lembagaData?.data) {
@@ -424,60 +436,400 @@ function DashboardPage() {
       >
         {/* Check if any dashboard data is available */}
         {(!dashboardInfokom && !dashboardEmba) ? (
-          <Grid container justifyContent='space-between'>
-            <Grid size={5.8} sx={{ backgroundColor: "#f5f5f5", p: 2, }}>
-              <RadarChart
-                height={300}
-                series={[]}
-                radar={{
-                  max: 100,
-                  metrics: []
+          <Grid container spacing={2}>
+
+            {/* RADAR EMPTY */}
+            <Grid size={4}>
+              <Box
+                sx={{
+                  background: "#fff",
+                  borderRadius: 3,
+                  p: 2,
+                  border: "1px solid #e0e0e0",
+                  height: "100%",
                 }}
-              />
+              >
+                <Typography variant="h6" fontWeight={700} mb={2}>
+                  Assessment Radar
+                </Typography>
+
+                <Box
+                  sx={{
+                    height: 300,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexDirection: "column",
+                    color: "text.secondary",
+                  }}
+                >
+                  <Typography variant="body1" fontWeight={600}>
+                    No Radar Data
+                  </Typography>
+
+                  <Typography variant="body2">
+                    Select accreditation data first
+                  </Typography>
+                </Box>
+              </Box>
             </Grid>
-            <Grid size={5.8} sx={{ backgroundColor: "#f5f5f5", p: 2, }}>
-              <BarChart
-                height={300}
-                xAxis={[{
-                  scaleType: "band",
-                  data: [],
-                }]}
-                series={[]}
-              />
+
+            {/* GAP HEATMAP EMPTY */}
+            <Grid size={4}>
+              <Box
+                sx={{
+                  background: "#fff",
+                  borderRadius: 3,
+                  p: 2,
+                  border: "1px solid #e0e0e0",
+                  height: "100%",
+                }}
+              >
+                <Typography variant="h6" fontWeight={700} mb={2}>
+                  Gap Heatmap
+                </Typography>
+
+                <Box
+                  sx={{
+                    height: 300,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexDirection: "column",
+                    color: "text.secondary",
+                  }}
+                >
+                  <Typography variant="body1" fontWeight={600}>
+                    No Gap Analysis
+                  </Typography>
+
+                  <Typography variant="body2">
+                    Heatmap data unavailable
+                  </Typography>
+                </Box>
+              </Box>
             </Grid>
+
+            {/* BAR EMPTY */}
+            <Grid size={4}>
+              <Box
+                sx={{
+                  background: "#fff",
+                  borderRadius: 3,
+                  p: 2,
+                  border: "1px solid #e0e0e0",
+                  height: "100%",
+                }}
+              >
+                <Typography variant="h6" fontWeight={700} mb={2}>
+                  Performance Trend
+                </Typography>
+
+                <Box
+                  sx={{
+                    height: 300,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexDirection: "column",
+                    color: "text.secondary",
+                  }}
+                >
+                  <Typography variant="body1" fontWeight={600}>
+                    No Performance Data
+                  </Typography>
+
+                  <Typography variant="body2">
+                    Historical trend unavailable
+                  </Typography>
+                </Box>
+              </Box>
+            </Grid>
+
           </Grid>
         ) : (
-          <Grid container justifyContent='space-between'>
-            <Grid size={5.8} sx={{ backgroundColor: "#f5f5f5", p: 2, }}>
-              <RadarChart
-                height={300}
-                series={[
-                  { label: 'Prodi', data: dashboardInfokom?.radar?.datasets?.prodi || dashboardEmba?.radar?.datasets?.prodi || [], fillArea: true, },
-                  { label: 'LPMI', data: dashboardInfokom?.radar?.datasets?.lpmi || dashboardEmba?.radar?.datasets?.lpmi || [], fillArea: true, },
-                  { label: 'Assesor', data: dashboardInfokom?.radar?.datasets?.assesor || dashboardEmba?.radar?.datasets?.assesor || [], fillArea: true, },
-                ]}
-                radar={{
-                  max: 100,
-                  metrics: dashboardInfokom?.radar?.labels || dashboardEmba?.radar?.labels || []
+          // <Grid container justifyContent='space-between'>
+          //   <Grid size={5.8} sx={{ backgroundColor: "#f5f5f5", p: 2, }}>
+          //     <RadarChart
+          //       height={300}
+          //       series={[
+          //         { label: 'Prodi', data: dashboardInfokom?.radar?.datasets?.prodi || dashboardEmba?.radar?.datasets?.prodi || [], fillArea: true, },
+          //         { label: 'LPMI', data: dashboardInfokom?.radar?.datasets?.lpmi || dashboardEmba?.radar?.datasets?.lpmi || [], fillArea: true, },
+          //         { label: 'Assesor', data: dashboardInfokom?.radar?.datasets?.assesor || dashboardEmba?.radar?.datasets?.assesor || [], fillArea: true, },
+          //       ]}
+          //       radar={{
+          //         max: 100,
+          //         metrics: dashboardInfokom?.radar?.labels || dashboardEmba?.radar?.labels || []
+          //       }}
+          //     />
+          //   </Grid>
+          //   <Grid size={5.8} sx={{ backgroundColor: "#f5f5f5", p: 2, }}>
+          //     <BarChart
+          //       height={300}
+          //       xAxis={[{
+          //         scaleType: "band",
+          //         data: dashboardInfokom?.bar?.labels || dashboardEmba?.bar?.labels || [],
+          //       }]}
+          //       series={[
+          //         { label: 'Prodi', data: dashboardInfokom?.bar?.datasets?.prodi || dashboardEmba?.bar?.datasets?.prodi || [], barLabel: 'value' },
+          //         { label: 'LPMI', data: dashboardInfokom?.bar?.datasets?.lpmi || dashboardEmba?.bar?.datasets?.lpmi || [], barLabel: 'value' },
+          //         { label: 'Assesor', data: dashboardInfokom?.bar?.datasets?.assesor || dashboardEmba?.bar?.datasets?.assesor || [], barLabel: 'value' },
+          //       ]}
+          //     />
+          //   </Grid>
+          // </Grid>
+          <Grid container spacing={2}>
+
+            {/* RADAR */}
+            <Grid size={4}>
+              <Box
+                sx={{
+                  background: "#fff",
+                  borderRadius: 3,
+                  p: 2,
+                  height: "100%",
+                  border: "1px solid #e0e0e0",
                 }}
-              />
+              >
+                <Typography variant="h6" fontWeight={700} mb={2}>
+                  Assessment Radar
+                </Typography>
+
+                <RadarChart
+                  height={300}
+                  series={[
+                    {
+                      label: 'Prodi',
+                      data: dashboardData?.radar?.datasets?.prodi || [],
+                      fillArea: true,
+                    },
+                    {
+                      label: 'LPMI',
+                      data: dashboardData?.radar?.datasets?.lpmi || [],
+                      fillArea: true,
+                    },
+                    {
+                      label: 'Assesor',
+                      data: dashboardData?.radar?.datasets?.assesor || [],
+                      fillArea: true,
+                    },
+                  ]}
+                  radar={{
+                    max: 100,
+                    metrics: dashboardData?.radar?.labels || []
+                  }}
+                />
+              </Box>
             </Grid>
-            <Grid size={5.8} sx={{ backgroundColor: "#f5f5f5", p: 2, }}>
-              <BarChart
-                height={300}
-                xAxis={[{
-                  scaleType: "band",
-                  data: dashboardInfokom?.bar?.labels || dashboardEmba?.bar?.labels || [],
-                }]}
-                series={[
-                  { label: 'Prodi', data: dashboardInfokom?.bar?.datasets?.prodi || dashboardEmba?.bar?.datasets?.prodi || [], barLabel: 'value' },
-                  { label: 'LPMI', data: dashboardInfokom?.bar?.datasets?.lpmi || dashboardEmba?.bar?.datasets?.lpmi || [], barLabel: 'value' },
-                  { label: 'Assesor', data: dashboardInfokom?.bar?.datasets?.assesor || dashboardEmba?.bar?.datasets?.assesor || [], barLabel: 'value' },
-                ]}
-              />
+
+            {/* GAP HEATMAP */}
+            <Grid size={4}>
+              <Box
+                sx={{
+                  background: "#fff",
+                  borderRadius: 3,
+                  p: 2,
+                  border: "1px solid #e0e0e0",
+                  height: "100%",
+                }}
+              >
+                <Typography variant="h6" fontWeight={700} mb={2}>
+                  Gap Heatmap
+                </Typography>
+
+                <Stack spacing={1}>
+                  {(dashboardData as any)?.gap_heatmap?.map((item: any) => (
+                    <Grid container key={item.criteria}>
+                      <Grid size={4}>
+                        <Box
+                          sx={{
+                            p: 1,
+                            border: "1px solid #eee",
+                            fontSize: 14,
+                          }}
+                        >
+                          {item.criteria}
+                        </Box>
+                      </Grid>
+
+                      <Grid size={4}>
+                        <Box
+                          sx={{
+                            p: 1,
+                            color: "#fff",
+                            textAlign: "center",
+                            background: heatmapColor(item.prodi_vs_lpmi),
+                            fontWeight: 700,
+                          }}
+                        >
+                          {item.prodi_vs_lpmi > 0 ? "+" : ""}
+                          {item.prodi_vs_lpmi}
+                        </Box>
+                      </Grid>
+
+                      <Grid size={4}>
+                        <Box
+                          sx={{
+                            p: 1,
+                            color: "#fff",
+                            textAlign: "center",
+                            background: heatmapColor(item.lpmi_vs_assesor),
+                            fontWeight: 700,
+                          }}
+                        >
+                          {item.lpmi_vs_assesor > 0 ? "+" : ""}
+                          {item.lpmi_vs_assesor}
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  ))}
+                </Stack>
+
+                <Grid container mt={2}>
+                  <Grid size={4}></Grid>
+
+                  <Grid size={4}>
+                    <Typography textAlign="center" fontSize={12}>
+                      Prodi vs LPMI
+                    </Typography>
+                  </Grid>
+
+                  <Grid size={4}>
+                    <Typography textAlign="center" fontSize={12}>
+                      LPMI vs Assesor
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Box>
             </Grid>
+
+            {/* BAR CHART */}
+            <Grid size={4}>
+              <Box
+                sx={{
+                  background: "#fff",
+                  borderRadius: 3,
+                  p: 2,
+                  border: "1px solid #e0e0e0",
+                  height: "100%",
+                }}
+              >
+                <Typography variant="h6" fontWeight={700} mb={2}>
+                  Performance Trend
+                </Typography>
+
+                <BarChart
+                  height={300}
+                  xAxis={[
+                    {
+                      scaleType: "band",
+                      data: dashboardData?.bar?.labels || [],
+                    },
+                  ]}
+                  series={[
+                    {
+                      label: 'Prodi',
+                      data: dashboardData?.bar?.datasets?.prodi || [],
+                    },
+                    {
+                      label: 'LPMI',
+                      data: dashboardData?.bar?.datasets?.lpmi || [],
+                    },
+                    {
+                      label: 'Assesor',
+                      data: dashboardData?.bar?.datasets?.assesor || [],
+                    },
+                  ]}
+                />
+              </Box>
+            </Grid>
+
           </Grid>
         )}
+
+        <Grid container spacing={2} mt={1}>
+
+          <Grid size={3}>
+            <Box
+              sx={{
+                background: "linear-gradient(135deg,#0d47a1,#1565c0)",
+                color: "#fff",
+                borderRadius: 3,
+                p: 3,
+              }}
+            >
+              <Typography variant="body2">
+                Overall Consistency
+              </Typography>
+
+              <Typography variant="h4" fontWeight={700}>
+                82%
+              </Typography>
+            </Box>
+          </Grid>
+
+          <Grid size={3}>
+            <Box
+              sx={{
+                background: "linear-gradient(135deg,#b71c1c,#e53935)",
+                color: "#fff",
+                borderRadius: 3,
+                p: 3,
+              }}
+            >
+              <Typography variant="body2">
+                Critical Gap
+              </Typography>
+
+              <Typography variant="h4" fontWeight={700}>
+                -1.0
+              </Typography>
+            </Box>
+          </Grid>
+
+          <Grid size={3}>
+            <Box
+              sx={{
+                background: "linear-gradient(135deg,#1b5e20,#43a047)",
+                color: "#fff",
+                borderRadius: 3,
+                p: 3,
+              }}
+            >
+              <Typography variant="body2">
+                Prediction Score
+              </Typography>
+
+              <Typography variant="h4" fontWeight={700}>
+                {(dashboardData as any)?.prediction?.predicted_score != null
+                  ? Number(
+                    (dashboardData as any).prediction.predicted_score
+                  ).toFixed(2)
+                  : "-"}
+              </Typography>
+            </Box>
+          </Grid>
+
+          <Grid size={3}>
+            <Box
+              sx={{
+                background: "linear-gradient(135deg,#ef6c00,#ffa726)",
+                color: "#fff",
+                borderRadius: 3,
+                p: 3,
+              }}
+            >
+              <Typography variant="body2">
+                Benchmark Status
+              </Typography>
+
+              <Typography variant="h4" fontWeight={700}>
+                Good
+              </Typography>
+            </Box>
+          </Grid>
+
+        </Grid>
 
         {selectedLembaga == 1 &&
           <>

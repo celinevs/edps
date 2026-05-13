@@ -1,11 +1,18 @@
 "use client"
 
-import { Stack, Button, Typography, Grid, LinearProgress, Box } from "@mui/material";
+import { Stack, Button, Typography, Grid, LinearProgress, Box, MenuItem, CircularProgress } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/app/service/hooks/useAuth";
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Akreditasi, Summary } from "@/model/Akreditasi";
-import { useGetAkreditasiQuery } from "@/api/akreditasi";
+import { Lembaga } from "@/model/Lembaga";
+import { AkreditasiParamSchema, AkreditasiFilter } from "../event/page";
+import { useGetAkreditasiQuery, useGetTahunBerlakuQuery } from "@/api/akreditasi";
+import { useGetLembagaQuery } from "@/api/lembaga";
+import DropdownInputController from "@/app/component/controller/DropdownInputController";
 import DataTable, { Column } from "@/app/component/table/DataTable";
 import { formatDate } from "@/app/service/utils/func";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
@@ -16,34 +23,67 @@ import StatCard from "@/app/component/statCard";
 
 function HomePage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const [totalData, setTotalData] = useState(0)
     const [page, setPage] = useState(0)
     const [perPage, setPerPage] = useState(5)
     const [akreditasi, setAkreditasi] = useState<Akreditasi[]>([])
     const [summary, setSummary] = useState<Summary>()
+    const [lembaga, setLembaga] = useState<Lembaga[]>([]);
+    const [tahun, setTahun] = useState<string[]>([]);
     const isAdmin = user?.role === 'ADMIN';
     const isUPPS = user?.role === 'UPPS' || user?.role === 'SUPERADMIN';
-    const { data } = useGetAkreditasiQuery({
-        page: page + 1,
-        per_page: perPage,
-        available: true,
-        ...(isAdmin && { only_null_assesor: true }),
-    },
-        {
-            skip: !user
-        });
+    const { data: tahunData } = useGetTahunBerlakuQuery({ id_prodi: user?.id_prodi || undefined });
+    const { data: lembagaData } = useGetLembagaQuery(undefined);
+
     const columnVisibility = {
         admin: {
             hidden: ['actions', 'tanggal_validasi', 'status', 'status_assesor', 'fakultas']
         },
         upps: {
-             hidden: ['actions', 'tanggal_validasi', 'status', 'fakultas']
+            hidden: ['tanggal_validasi', 'status', 'fakultas']
         },
         nonAdmin: {
             hidden: ['status_prodi', 'status_lpmi', 'status_assesor']
         }
     };
+
+    const defaultValues: AkreditasiFilter = {
+        tahun_berlaku: '',
+        id_qs: '',
+        id_prodi: '',
+        fakultas: '',
+        id_lembaga: undefined,
+    }
+
+    const { control, formState, handleSubmit, setValue, setError, trigger, watch, reset } = useForm<AkreditasiFilter>({
+        mode: 'onSubmit',
+        defaultValues,
+        resolver: zodResolver(AkreditasiParamSchema)
+    });
+
+    const filters = watch();
+    const { data } = useGetAkreditasiQuery({
+        page: page + 1,
+        per_page: perPage,
+        available: true,
+        is_home_page: true,
+        id_prodi: filters.id_prodi || undefined,
+        tahun_berlaku: filters.tahun_berlaku || undefined,
+        fakultas: filters.fakultas || undefined,
+        id_qs: filters.id_qs || undefined,
+        id_lembaga: filters.id_lembaga || undefined,
+        ...(isAdmin && { only_null_assesor: true }),
+    },
+        {
+            skip: !user
+        });
+
+    useEffect(() => {
+        if (lembagaData?.data) {
+            setLembaga(lembagaData.data);
+        }
+    }, [lembagaData]);
 
     useEffect(() => {
         if (data?.data) {
@@ -52,6 +92,12 @@ function HomePage() {
             setSummary(data?.data.summary)
         }
     }, [data]);
+
+    useEffect(() => {
+        if (tahunData?.data) {
+            setTahun(tahunData.data)
+        }
+    })
 
     const handleChangePage = (_: unknown, newPage: number) => {
         setPage(newPage);
@@ -72,8 +118,22 @@ function HomePage() {
             total_max_bobot: row.question_set.total_max_bobot,
             is_lpmi: true
         }));
-
         router.push('/form');
+    };
+
+    const handleAnalytic = (row: Akreditasi) => {
+        sessionStorage.setItem('formData', JSON.stringify({
+            id_periode: row.id_akreditasi,
+            status: row.status,
+            nama_periode: row.nama_akreditasi,
+            tanggal_selesai: row.tanggal_selesai,
+            lembaga: row.question_set.id_lembaga,
+            nama_akreditasi: row.nama_akreditasi,
+            total_max_bobot: row.question_set.total_max_bobot,
+            id_regulasi: row.question_set.id_qs,
+        }));
+
+        router.push('/analytics');
     };
 
     const columns: Column<Akreditasi>[] = [
@@ -107,7 +167,7 @@ function HomePage() {
         {
             id: 'status_lpmi',
             label: 'LPMI Status',
-            render: (row) => row.status == 'In Progress' ? 'Awaiting Submission' : row.status == 'Reviewed' ? 'Validated' : row.status,
+            render: (row) => row.status == 'In Progress' ? 'Awaiting Submission' : (row.status == 'Reviewed' || row.status == 'Reviewing') ? 'Validated' : row.status,
         },
         {
             id: 'status_assesor',
@@ -146,13 +206,25 @@ function HomePage() {
             label: 'Actions',
             render: (row) => (
                 <Stack direction="row" spacing={1}>
-                    <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => handleValidation(row)}
-                    >
-                        Edit Form
-                    </Button>
+                    {!isUPPS &&
+                        <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => handleValidation(row)}
+                        >
+                            Edit Form
+                        </Button>
+                    }
+                    {isUPPS &&
+                        <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => handleAnalytic(row)}
+                            disabled={row.status != 'Reviewed'}
+                        >
+                            View Analytic
+                        </Button>
+                    }
                 </Stack>
             ),
         },
@@ -196,19 +268,74 @@ function HomePage() {
         },
     ];
 
+    if (authLoading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+
     return (
         <>
-            <Typography
-                variant="h4"
-                gutterBottom
-                sx={{
-                    fontWeight: 600,
-                    mb: 1,
-                    color: 'primary.main',
-                }}
-            >
-                Welcome, {user?.role}
-            </Typography>
+            <Grid container justifyContent="space-between" mb={1}>
+                <Grid>
+                    <Typography
+                        variant="h4"
+                        gutterBottom
+                        sx={{
+                            fontWeight: 500,
+                            mb: 3,
+                            color: 'primary.main',
+                        }}
+                    >
+                        Welcome, {user?.role}
+                    </Typography>
+                </Grid>
+                <Grid container gap={0.5}>
+                    <Grid>
+                        <DropdownInputController
+                            name="tahun_berlaku"
+                            control={control}
+                            label="Tahun Berlaku"
+                            size='small'
+                            sx={{
+                                "& .MuiInputBase-root": {
+                                    width: 200
+                                }
+                            }}
+                        >
+                            {tahun.map((category) => (
+                                <MenuItem
+                                    key={String(category)}
+                                    value={String(category)}
+                                >
+                                    {category}
+                                </MenuItem>
+                            ))}
+                        </DropdownInputController>
+                    </Grid>
+                    <Grid>
+                        <DropdownInputController
+                            name="id_lembaga"
+                            control={control}
+                            label="Lembaga"
+                            size='small'
+                            sx={{
+                                "& .MuiInputBase-root": {
+                                    width: 200
+                                }
+                            }}
+                        >
+                            {lembaga.map((l) => (
+                                <MenuItem key={l.id_lembaga} value={l.id_lembaga}>
+                                    {l.nama_lembaga}
+                                </MenuItem>
+                            ))}
+                        </DropdownInputController>
+                    </Grid>
+                </Grid>
+            </Grid>
             <Grid container spacing={3} mb={3}>
                 {stats.map((item, index) => (
                     <Grid size={3} key={index}>
@@ -224,7 +351,7 @@ function HomePage() {
                     color: 'primary.main',
                 }}
             >
-                {(isAdmin || isUPPS)? 'Progress Overview': 'Validation Queue'}
+                {(isAdmin || isUPPS) ? 'Progress Overview' : 'Validation Queue'}
             </Typography>
             <DataTable
                 columns={filteredColumns}

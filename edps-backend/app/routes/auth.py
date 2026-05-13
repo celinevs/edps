@@ -18,7 +18,10 @@ oauth.register(
     client_id=Config.GOOGLE_CLIENT_ID,
     client_secret=Config.GOOGLE_CLIENT_SECRET,
     server_metadata_url=Config.GOOGLE_DISCOVERY_URL,
-    client_kwargs={'scope': 'openid email profile'}
+    client_kwargs={
+        'scope': 'openid email profile',
+        'prompt': 'select_account'
+                   }
 )
 
 #Configure redis to store access key & refresh key that hasnt expired but unable to use

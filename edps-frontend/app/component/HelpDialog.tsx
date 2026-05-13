@@ -32,7 +32,6 @@ function HelpDialog(props: HelpDialogProps) {
             fullWidth
             PaperProps={{
                 sx: {
-                    height: '100vh',
                     maxHeight: '100vh',
                 }
             }}

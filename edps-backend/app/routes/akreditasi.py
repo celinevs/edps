@@ -11,8 +11,52 @@ from datetime import datetime
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from sqlalchemy import func, case, cast, Date, Integer
 from datetime import datetime, date
+from app.service.analytic_service import fetch_data_from_db,prepare_features ,aggregate_per_exam, compute_and_combine_risk_metrics, compute_priority_table, predict_future_scores
 
 akreditasi_bp = Blueprint("akreditasi", __name__)
+
+@akreditasi_bp.route("/ml-dashboard", methods=["GET"])
+def ml_dashboard():
+
+    year_overview = request.args.get("year_overview")
+    year_dashboard = request.args.get("year_dashboard")
+    major = request.args.get("major")
+    exam = request.args.get("exam")
+
+    raw_df = fetch_data_from_db()
+
+    if raw_df.empty:
+        return success_response(message="No data available")
+
+    prepared_df =prepare_features(raw_df)
+
+    if year_dashboard:
+       prepared_df =prepared_df[prepared_df["year"] == year_dashboard]
+
+    if major:
+       prepared_df =prepared_df[prepared_df["major"] == major]
+
+    if exam:
+       prepared_df =prepared_df[prepared_df["exam"] == exam]
+
+    features = aggregate_per_exam(prepared_df)
+
+    risk_exam, risk_major = compute_and_combine_risk_metrics(features)
+
+    priority_df = compute_priority_table(prepared_df)
+
+    # # Prediction
+    prediction_df = predict_future_scores(prepared_df)
+
+    return success_response( 
+        data={
+        "risk_per_exam": risk_exam.to_dict(orient="records"),
+        "risk_per_major": risk_major.to_dict(orient="records"),
+        "priority_table": priority_df.to_dict(orient="records"),
+        "predictions": prediction_df.to_dict(orient="records"),
+        },
+        message="Dashboard fetched!"
+    )
 
 @akreditasi_bp.route('/akreditasi', methods=["GET"])
 @jwt_required()
@@ -35,29 +79,14 @@ def get_akreditasi():
         status = request.args.get('status')
         fakultas = request.args.get('fakultas')
         available = request.args.get('available')
+        id_lembaga = request.args.get('id_lembaga', type=int)
         only_null_assesor = request.args.get('only_null_assesor')
+        is_assesor_page = request.args.get('is_assesor_page')
+        is_home_page = request.args.get('is_home_page')
 
         query = Akreditasi.query
         today = date.today()
-
-        if available is not None:
-            available = available.lower() == "true"
-            if role == "PRODI":
-                    query = query.filter(
-                        Akreditasi.status == 'In Progress',
-                        cast(Akreditasi.tanggal_selesai_prodi, Date) >= today
-                    )
-            elif role == "LPMI":
-                    query = query.filter(
-                        Akreditasi.status.in_(['Submitted', 'Validating']),
-                        cast(Akreditasi.tanggal_selesai_lpmi, Date) >= today
-                    )
-            else:
-                    query = query.filter(cast(Akreditasi.tanggal_selesai_lpmi, Date) >= today)
         
-        if only_null_assesor:
-            query = query.filter(Akreditasi.tanggal_validasi.is_(None))
-
         if fakultas:
             query = query.filter(Akreditasi.prodi.has(fakultas=fakultas))
 
@@ -70,23 +99,47 @@ def get_akreditasi():
 
         if id_qs:
             query = query.filter(Akreditasi.id_qs == id_qs)
+        
+        if id_lembaga:
+            query = query.join(
+                QuestionSet,
+                Akreditasi.id_qs == QuestionSet.id_qs
+                ).filter(
+                    QuestionSet.id_lembaga == id_lembaga
+                )
 
         if id_prodi:
             query = query.filter(Akreditasi.id_prodi == id_prodi)
+        
+        if available is not None:
+            available = available.lower() == "true"
+            # if role == "PRODI":
+            #         query = query.filter(
+            #             Akreditasi.status == 'In Progress',
+            #             cast(Akreditasi.tanggal_selesai_prodi, Date) >= today
+            #         )
+            if role == "LPMI":
+                    if is_home_page is not None:
+                        is_home_page = is_home_page.lower() == "true"
+                        if is_home_page:
+                            query = query.filter( Akreditasi.status.in_(['Submitted', 'Validating']),
+                            cast(Akreditasi.tanggal_mulai, Date) <= today)
+                    else:
+                        query = query.filter( Akreditasi.status.in_(['Submitted', 'Validating', 'Validated', 'Reviewing', 'Reviewed']),
+                        cast(Akreditasi.tanggal_mulai, Date) <= today)
+            else:
+                    query = query.filter(
+                        cast(Akreditasi.tanggal_mulai, Date) <= today)
 
-        # if tanggal_mulai:
-        #     try:
-        #         tgl = datetime.fromisoformat(tanggal_mulai)
-        #         query = query.filter(Akreditasi.tanggal_mulai >= tgl)
-        #     except ValueError:
-        #         return error_response("Format tanggal_mulai tidak valid", 400)
-
-        # if tanggal_selesai:
-        #     try:
-        #         tgl = datetime.fromisoformat(tanggal_selesai)
-        #         query = query.filter(Akreditasi.tanggal_selesai <= tgl)
-        #     except ValueError:
-        #         return error_response("Format tanggal_selesai tidak valid", 400)
+        if only_null_assesor is not None:
+            only_null_assesor = only_null_assesor.lower() == "true"
+            if only_null_assesor:
+                query = query.filter(Akreditasi.status.in_(['In Progress','Submitted', 'Validating']))
+        
+        if is_assesor_page is not None:
+            is_assesor_page = is_assesor_page.lower() == "true"
+            if is_assesor_page:
+                query = query.filter(Akreditasi.status.in_(['Validated', 'Reviewing', 'Reviewed']))
 
         summary = query.with_entities(
             func.sum(case((Akreditasi.status == 'In Progress', 1), else_=0)).label('in_progress'),
@@ -115,16 +168,14 @@ def get_akreditasi():
             elif role == "LPMI":
                 progress = a.progress_lpmi
                 tanggal_selesai = a.tanggal_selesai_lpmi
-            elif role == "ADMIN" or role == "SUPERADMIN":
+            elif role == "ADMIN" or role == "SUPERADMIN" or role == "UPPS":
                 tanggal_selesai = a.tanggal_selesai_prodi
-                if only_null_assesor is not None:
-                    only_null_assesor = only_null_assesor.lower() == "true"
-                    if only_null_assesor:
-                        progress = a.progress_assesor
+                if a.progress_lpmi != 100:
+                    progress = a.progress_lpmi
                 elif a.progress_prodi != 100:
                      progress = a.progress_prodi
                 else:
-                    progress = a.progress_lpmi
+                    progress = a.progress_assesor
 
             item = {
                 "id_akreditasi": a.id_akreditasi,
@@ -652,7 +703,8 @@ def get_dashboard_detail_infokom():
                 (Jawaban.id_qs == LamInfokom.id_qs) &
                 (Jawaban.q_no == LamInfokom.q_no)
             )
-            .filter(Jawaban.id_akreditasi == id_akreditasi)
+            .filter(Jawaban.id_akreditasi == id_akreditasi,
+                    Akreditasi.status == 'Reviewed')
             .group_by(LamInfokom.kode_kriteria)
             .order_by(LamInfokom.kode_kriteria)
             .all()
@@ -665,7 +717,7 @@ def get_dashboard_detail_infokom():
 
         for row in radar_data:
             weight = row.total_weight or 1
-            labels.append(row.kode_kriteria)
+            labels.append(row.kriteria)
             prodi.append((row.prodi or 0) / weight * 100)
             lpmi.append((row.lpmi or 0) / weight * 100)
             assesor.append((row.assesor or 0) / weight * 100)
@@ -678,6 +730,16 @@ def get_dashboard_detail_infokom():
                 "assesor": assesor
             }
         }
+
+        gap_heatmap = []
+        for row in radar_data:
+            weight = row.total_weight or 1
+
+            gap_heatmap.append({
+                "criteria": row.kode_kriteria,
+                "prodi_vs_lpmi": round(row.lpmi - row.prodi, 2),
+                "lpmi_vs_assesor": round(row.assesor - row.lpmi, 2),
+            })
 
         akreditasi = (
             db.session.query(
@@ -704,12 +766,25 @@ def get_dashboard_detail_infokom():
                 "assesor": [r[3] or 0 for r in akreditasi],
                 }
                 }
+        
+        raw_df = fetch_data_from_db('infokom')
+        
+        if not raw_df.empty:
+            prepared_df =prepare_features(raw_df)
+            prediction_df = predict_future_scores(prepared_df, major= akreditasi_obj.prodi.nama_prodi)
+
 
         return success_response(
             data={
                 "table": table,
                 "radar": radar,
                 "bar": bar,
+                "gap_heatmap": gap_heatmap,
+                "prediction": (
+                    prediction_df.iloc[0].to_dict()
+                    if not prediction_df.empty
+                    else None
+                    )
             },
             message="Detail akreditasi berhasil diambil"
         )
@@ -832,7 +907,9 @@ def get_dashboard_detail_emba():
                 (Jawaban.id_qs == LamEmba.id_qs) &
                 (Jawaban.q_no == LamEmba.q_no)
             )
-            .filter(Jawaban.id_akreditasi == id_akreditasi)
+            .filter(Jawaban.id_akreditasi == id_akreditasi,
+                    Akreditasi.status == 'Reviewed'
+                    )
             .group_by(LamEmba.kode_kriteria)
             .order_by(LamEmba.kode_kriteria)
             .all()
@@ -859,6 +936,16 @@ def get_dashboard_detail_emba():
             }
         }
 
+        gap_heatmap = []
+        for row in radar_data:
+            weight = row.total_weight or 1
+
+            gap_heatmap.append({
+                "criteria": row.kode_kriteria,
+                "prodi_vs_lpmi": round(row.lpmi - row.prodi, 2),
+                "lpmi_vs_assesor": round(row.assesor - row.lpmi, 2),
+            })
+
         akreditasi = (
             db.session.query(
                 Akreditasi.tahun_berlaku,
@@ -884,12 +971,24 @@ def get_dashboard_detail_emba():
                 "assesor": [r[3] or 0 for r in akreditasi],
                 }
                 }
+        
+        raw_df = fetch_data_from_db('emba')
+        
+        if not raw_df.empty:
+            prepared_df =prepare_features(raw_df)
+            prediction_df = predict_future_scores(prepared_df, major= akreditasi_obj.prodi.nama_prodi)
 
         return success_response(
             data={
                 "table": kriteria_table,
                 "radar": radar,
                 "bar": bar,
+                "gap_heatmap": gap_heatmap,
+                "prediction": (
+                    prediction_df.iloc[0].to_dict()
+                    if not prediction_df.empty
+                    else None
+                    )
             },
             message="Detail akreditasi berhasil diambil"
         )

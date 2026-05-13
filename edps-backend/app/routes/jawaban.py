@@ -1,7 +1,7 @@
 from flask import Blueprint, request, send_file, make_response
 # from app.models import db, Akreditasi, JawabanUser, Pertanyaan, IndikatorJawaban, UploadFile
 from app import db
-from app.models.Jawaban import Jawaban, UploadFile
+from app.models.Jawaban import Jawaban, UploadFile, EmbaDosen
 from app.models.Akreditasi import Akreditasi
 from app.models.QuestionList import LamEmba, LamInfokom
 from app.utils.response_handler import success_response, error_response, handle_exception
@@ -11,7 +11,7 @@ import os
 from werkzeug.utils import secure_filename
 import mimetypes
 from flask_cors import cross_origin
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "/app/uploads")
 
@@ -21,21 +21,79 @@ jawaban_bp = Blueprint("jawaban", __name__)
 @jwt_required()
 def get_jawaban_user_by_akreditasi(id_akreditasi):
     try:
+        # Get current user role
+        jwt_data = get_jwt()
+        user_role = jwt_data.get('role')
+        
         akreditasi = Akreditasi.query.get(id_akreditasi)
         if not akreditasi:
             return error_response(f"Akreditasi dengan id {id_akreditasi} tidak ditemukan", 404)
-
+        
+        is_infokom = akreditasi.question_set.id_lembaga == 1
+        
         jawaban_list = Jawaban.query.filter_by(id_akreditasi=id_akreditasi).all()
+        
+        emba_dosen_data = None
+        if not is_infokom:
+            emba_dosen_list = EmbaDosen.query.filter_by(id_akreditasi=id_akreditasi).all()
+            emba_dosen_data = []
+            for dosen in emba_dosen_list:
+                # Filter based on role and status
+                should_include = False
+                
+                # PRODI: show own data, plus LPMI if status allows, plus ASSESOR if Reviewed
+                if user_role == 'PRODI':
+                    if dosen.user_role == 'PRODI':
+                        should_include = True
+                    elif dosen.user_role == 'LPMI' and akreditasi.status in ['Validated', 'Reviewed']:
+                        should_include = True
+                    elif dosen.user_role == 'ASSESOR' and akreditasi.status == 'Reviewed':
+                        should_include = True
+                
+                # LPMI: show PRODI and own data
+                elif user_role == 'LPMI':
+                    if dosen.user_role in ['PRODI', 'LPMI']:
+                        should_include = True
+                    elif dosen.user_role == 'ASSESOR' and akreditasi.status == 'Reviewed':
+                        should_include = True
+                
+                # ASSESOR or SUPERADMIN: show all data
+                elif user_role in ['ASSESOR', 'SUPERADMIN']:
+                    should_include = True
+                
+                if should_include:
+                    dosen_dict = dosen.to_dict() if hasattr(dosen, 'to_dict') else {
+                        "id_jawaban_dosen": dosen.id_jawaban_dosen,
+                        "user_role": dosen.user_role,
+                        "dosen_total": dosen.dosen_total,
+                        "dosen_tetap": dosen.dosen_tetap,
+                        "dosen_doktor": dosen.dosen_doktor,
+                        "dosen_magister": dosen.dosen_magister,
+                        "dosen_guru_besar": dosen.dosen_guru_besar,
+                        "dosen_lektor_kepala": dosen.dosen_lektor_kepala,
+                        "dosen_lektor": dosen.dosen_lektor,
+                        "dosen_publikasi": dosen.dosen_publikasi,
+                        "dosen_sertifikat": dosen.dosen_sertifikat,
+                    }
+                    emba_dosen_data.append(dosen_dict)
+        else:
+            print("DEBUG: Skipping EmbaDosen because this is INFOKOM (id_lembaga=1)")
 
         if not jawaban_list:
             return success_response(
-                data=[],
+                data={
+                    "jumlah_jawaban": 0,
+                    "jawaban": [],
+                    "emba_dosen": emba_dosen_data if not is_infokom else None,
+                    "evaluasi_integrasi": akreditasi.evaluasi_integrasi,
+                    "rekomendasi_ak": akreditasi.rekomendasi_ak,
+                    "catatan_assesor": akreditasi.catatan_assesor
+                },
                 message="Tidak ada jawaban dalam Akreditasi ini"
             )
 
         results = []
         for j in jawaban_list:
-
             files = []
             if j.uploads:
                 for f in j.uploads:
@@ -44,35 +102,92 @@ def get_jawaban_user_by_akreditasi(id_akreditasi):
                         "file_name": f.file_name,
                     })
 
-            results.append({
+            jawaban_item = {
                 "id_jawaban": j.id_jawaban,
                 "q_no": j.q_no,
-                "jawaban_prodi": j.jawaban_prodi,
-                "skor_prodi": j.skor_prodi,
-                "jawaban_lpmi": j.jawaban_lpmi,
-                "skor_lpmi": j.skor_lpmi,
-                "note_lpmi": j.note_lpmi,
-                "jawaban_assesor": j.jawaban_assesor,
-                "skor_assesor": j.skor_assesor,
-                "note_assesor": j.note_assesor,
                 "files": files
-            })
+            }
+            
+            # Case 1: User is PRODI - show only prodi data
+            if user_role == 'PRODI':
+                jawaban_item.update({
+                    "jawaban_prodi": j.jawaban_prodi,
+                    "skor_prodi": j.skor_prodi,
+                })
+                # Only show LPMI data if status is Validated or Reviewed
+                if akreditasi.status in ['Validated', 'Reviewed']:
+                    jawaban_item.update({
+                        "jawaban_lpmi": j.jawaban_lpmi,
+                        "skor_lpmi": j.skor_lpmi,
+                        "note_lpmi": j.note_lpmi,
+                    })
+                # Only show ASSESOR data if status is Reviewed
+                if akreditasi.status == 'Reviewed':
+                    jawaban_item.update({
+                        "jawaban_assesor": j.jawaban_assesor,
+                        "skor_assesor": j.skor_assesor,
+                        "note_assesor": j.note_assesor,
+                    })
+            
+            # Case 2: User is LPMI - show prodi and lpmi data
+            elif user_role == 'LPMI':
+                jawaban_item.update({
+                    "jawaban_prodi": j.jawaban_prodi,
+                    "skor_prodi": j.skor_prodi,
+                    "jawaban_lpmi": j.jawaban_lpmi,
+                    "skor_lpmi": j.skor_lpmi,
+                    "note_lpmi": j.note_lpmi,
+                })
+                # Also show ASSESOR data if status is Reviewed
+                if akreditasi.status == 'Reviewed':
+                    jawaban_item.update({
+                        "jawaban_assesor": j.jawaban_assesor,
+                        "skor_assesor": j.skor_assesor,
+                        "note_assesor": j.note_assesor,
+                    })
+            
+            # Case 3: User is ADMIN - show all data
+            elif user_role == 'ADMIN' or user_role == 'UPPS':
+                jawaban_item.update({
+                    "jawaban_prodi": j.jawaban_prodi,
+                    "skor_prodi": j.skor_prodi,
+                    "jawaban_lpmi": j.jawaban_lpmi,
+                    "skor_lpmi": j.skor_lpmi,
+                    "note_lpmi": j.note_lpmi,
+                    "jawaban_assesor": j.jawaban_assesor,
+                    "skor_assesor": j.skor_assesor,
+                    "note_assesor": j.note_assesor,
+                })
+            
+            # Case 4: User is SUPERADMIN - show all data regardless of status
+            elif user_role == 'SUPERADMIN':
+                jawaban_item.update({
+                    "jawaban_prodi": j.jawaban_prodi,
+                    "skor_prodi": j.skor_prodi,
+                    "jawaban_lpmi": j.jawaban_lpmi,
+                    "skor_lpmi": j.skor_lpmi,
+                    "note_lpmi": j.note_lpmi,
+                    "jawaban_assesor": j.jawaban_assesor,
+                    "skor_assesor": j.skor_assesor,
+                    "note_assesor": j.note_assesor,
+                })
+            
+            results.append(jawaban_item)
 
         return success_response(
             data={
                 "jumlah_jawaban": len(results),
                 "jawaban": results,
-                "akreditasi_info": {
-                    "total_skor_prodi": akreditasi.total_skor_prodi,
-                    "total_skor_lpmi": akreditasi.total_skor_lpmi
-                }
+                "emba_dosen": emba_dosen_data if not is_infokom else None,
+                "evaluasi_integrasi": akreditasi.evaluasi_integrasi,
+                "rekomendasi_ak": akreditasi.rekomendasi_ak,
+                "catatan_assesor": akreditasi.catatan_assesor
             },
             message="Data jawaban berhasil diambil"
         )
 
     except Exception as e:
         return handle_exception(e)
-
 
 @jawaban_bp.route("/jawaban-user", methods=["POST"])
 @jwt_required()
@@ -85,6 +200,7 @@ def saved_submit_jawaban():
         id_qs = data.get("id_qs")
         jawaban_list = data.get("jawaban", [])
         is_submit = data.get("is_submit", False)
+        dosen = data.get('dosen')
 
         if not id_akreditasi:
             return error_response("id_akreditasi wajib dikirim", 400)
@@ -105,83 +221,104 @@ def saved_submit_jawaban():
         if akreditasi.status == 'Submitted':
             return error_response("Jawaban sudah tidak bisa diubah", 400)
 
-        if not isinstance(jawaban_list, list) or not jawaban_list:
-            return error_response("Data 'jawaban' harus berupa list dan tidak boleh kosong", 400)
-
         created_items = []
         updated_items = []
         skipped_items = []
         error_items = []
 
-        for item in jawaban_list:
-            q_no = item.get("q_no")
-            jawaban = item.get("jawaban")
+        if jawaban_list:
+            for item in jawaban_list:
+                q_no = item.get("q_no")
+                jawaban = item.get("jawaban")
 
-            if not q_no or jawaban is None:
-                error_items.append({
-                    "item": item,
-                    "reason": "q_no atau jawaban tidak ditemukan"
-                })
-                continue
-
-            if is_infokom:
-                pertanyaan = LamInfokom.query.filter_by(
-                    q_no=q_no,
-                    id_qs=id_qs
-                ).first()
-            else:
-                pertanyaan = LamEmba.query.filter_by(
-                    q_no=q_no,
-                    id_qs=id_qs
-                ).first()
-
-            if not pertanyaan:
-                error_items.append({
-                    "item": item,
-                    "reason": f"Pertanyaan dengan q_no {q_no} tidak ditemukan"
-                })
-                continue
-
-            if is_infokom:
-                skor_prodi = (jawaban / 4) * pertanyaan.bobot
-            else:
-                skor_prodi = jawaban
-
-            existing = Jawaban.query.filter_by(
-                id_akreditasi=id_akreditasi,
-                q_no=q_no
-            ).first()
-
-            if existing:
-                if existing.jawaban_prodi != jawaban:
-                    existing.jawaban_prodi = jawaban
-                    existing.skor_prodi = skor_prodi
-                    updated_items.append({
-                        "q_no": q_no,
-                        "id_jawaban": existing.id_jawaban
+                if not q_no or jawaban is None:
+                    error_items.append({
+                        "item": item,
+                        "reason": "q_no atau jawaban tidak ditemukan"
                     })
+                    continue
+
+                if is_infokom:
+                    pertanyaan = LamInfokom.query.filter_by(
+                        q_no=q_no,
+                        id_qs=id_qs
+                    ).first()
                 else:
-                    skipped_items.append({
-                        "q_no": q_no,
-                        "id_jawaban": existing.id_jawaban
+                    pertanyaan = LamEmba.query.filter_by(
+                        q_no=q_no,
+                        id_qs=id_qs
+                    ).first()
+
+                if not pertanyaan:
+                    error_items.append({
+                        "item": item,
+                        "reason": f"Pertanyaan dengan q_no {q_no} tidak ditemukan"
                     })
-            else:
-                new_jawaban = Jawaban(
-                    q_no=q_no,
-                    id_qs = id_qs,
-                    jawaban_prodi=jawaban,
+                    continue
+
+                if is_infokom:
+                    skor_prodi = (jawaban / 4) * pertanyaan.bobot
+                else:
+                    skor_prodi = jawaban
+
+                existing = Jawaban.query.filter_by(
                     id_akreditasi=id_akreditasi,
-                    skor_prodi=skor_prodi
+                    q_no=q_no
+                ).first()
+
+                if existing:
+                    if existing.jawaban_prodi != jawaban:
+                        existing.jawaban_prodi = jawaban
+                        existing.skor_prodi = skor_prodi
+                        updated_items.append({
+                            "q_no": q_no,
+                            "id_jawaban": existing.id_jawaban
+                        })
+                    else:
+                        skipped_items.append({
+                            "q_no": q_no,
+                            "id_jawaban": existing.id_jawaban
+                        })
+                else:
+                    new_jawaban = Jawaban(
+                        q_no=q_no,
+                        id_qs=id_qs,
+                        jawaban_prodi=jawaban,
+                        id_akreditasi=id_akreditasi,
+                        skor_prodi=skor_prodi
+                    )
+                    db.session.add(new_jawaban)
+
+                    created_items.append({
+                        "q_no": q_no
+                    })
+            
+            # update total skor - moved outside the for loop
+            akreditasi.update_totals()
+            akreditasi.update_progress()
+
+        if dosen and not is_infokom:
+            emba_dosen = EmbaDosen.query.filter_by(
+                id_akreditasi=id_akreditasi,
+                user_role='PRODI'
+            ).first()
+            
+            if not emba_dosen:
+                emba_dosen = EmbaDosen(
+                    id_akreditasi=id_akreditasi,
+                    user_role='PRODI'
                 )
-                db.session.add(new_jawaban)
+                db.session.add(emba_dosen)
 
-                created_items.append({
-                    "q_no": q_no
-                })
-
-        # update total skor
-        akreditasi.update_totals()
-        akreditasi.update_progress()
+            emba_dosen.dosen_total = dosen.get("dosen_total")
+            emba_dosen.dosen_tetap = dosen.get("dosen_tetap")
+            emba_dosen.dosen_doktor = dosen.get("dosen_doktor")
+            emba_dosen.dosen_magister = dosen.get("dosen_magister")
+            emba_dosen.dosen_guru_besar = dosen.get("dosen_guru_besar")
+            emba_dosen.dosen_lektor_kepala = dosen.get("dosen_lektor_kepala")
+            emba_dosen.dosen_lektor = dosen.get("dosen_lektor")
+            emba_dosen.dosen_publikasi = dosen.get("dosen_publikasi")
+            emba_dosen.dosen_sertifikat = dosen.get("dosen_sertifikat")
 
         if is_submit:
             user_id = get_jwt_identity()
@@ -206,6 +343,32 @@ def saved_submit_jawaban():
                     400,
                     data={"unanswered_questions": unanswered}
                 )
+            
+            if not is_infokom:
+                required_dosen_fields = ['dosen_total', 'dosen_tetap', 'dosen_doktor', 'dosen_magister',
+                                        'dosen_guru_besar', 'dosen_lektor_kepala', 'dosen_lektor',
+                                        'dosen_publikasi', 'dosen_sertifikat']
+                
+                emba_dosen = EmbaDosen.query.filter_by(
+                    id_akreditasi=id_akreditasi,
+                    user_role='PRODI'
+                ).first()
+                
+                if emba_dosen:
+                    missing_fields = [field for field in required_dosen_fields 
+                                    if getattr(emba_dosen, field) is None]
+                    
+                    if missing_fields:
+                        db.session.rollback()
+                        return error_response(
+                            f"EMBA lecturer data is incomplete. The following fields are required: {', '.join(missing_fields)}",
+                            400
+                        )
+                else:
+                    return error_response(
+                        f"EMBA lecturer data is missing. Please complete all required fields before submitting",
+                        404
+                    )
 
             akreditasi.id_pengisi = user_id
             akreditasi.status = "Submitted"
@@ -231,6 +394,7 @@ def saved_submit_jawaban():
         db.session.rollback()
         return handle_exception(e)
 
+
 @jawaban_bp.route("/jawaban-user/lpmi", methods=["POST"])
 @jwt_required()
 @role_required('LPMI', 'SUPERADMIN')
@@ -241,6 +405,7 @@ def review_lpmi():
         id_qs = data.get("id_qs")
         jawaban_list = data.get("jawaban", [])
         is_submit = data.get("is_submit", False)
+        dosen = data.get('dosen')
 
         if not id_akreditasi:
             return error_response("id_akreditasi wajib dikirim", 400)
@@ -249,8 +414,8 @@ def review_lpmi():
         if not akreditasi:
             return error_response(f"Akreditasi dengan id {id_akreditasi} tidak ditemukan", 404)
 
-        if not isinstance(jawaban_list, list) or not jawaban_list:
-            return error_response("Data 'jawaban' harus berupa list dan tidak boleh kosong", 400)
+        # if not isinstance(jawaban_list, list) or not jawaban_list:
+        #     return error_response("Data 'jawaban' harus berupa list dan tidak boleh kosong", 400)
         
         is_infokom = akreditasi.question_set.id_lembaga == 1
 
@@ -261,56 +426,128 @@ def review_lpmi():
         error_items = []
         updated_count = 0
 
-        for item in jawaban_list:
-            q_no = item.get("q_no")
-            jawaban = item.get("jawaban")
-            note_lpmi = item.get("note")
+        if jawaban_list:    
+            for item in jawaban_list:
+                q_no = item.get("q_no")
+                jawaban = item.get("jawaban")
+                note_lpmi = item.get("note")
 
-            if not q_no:
-                error_items.append({
-                    "item": item,
-                    "reason": "q_no tidak ditemukan"
-                })
-                continue
+                if not q_no:
+                    error_items.append({
+                        "item": item,
+                        "reason": "q_no tidak ditemukan"
+                    })
+                    continue
 
-            if is_infokom:
-                pertanyaan = LamInfokom.query.filter_by(
-                    q_no=q_no,
-                    id_qs=id_qs
+                if is_infokom:
+                    pertanyaan = LamInfokom.query.filter_by(
+                        q_no=q_no,
+                        id_qs=id_qs
+                    ).first()
+                else:
+                    pertanyaan = LamEmba.query.filter_by(
+                        q_no=q_no,
+                        id_qs=id_qs
+                    ).first()
+
+                if is_infokom:
+                    skor_lpmi = (jawaban / 4) * pertanyaan.bobot
+                else:
+                    skor_lpmi = jawaban
+
+                existing = Jawaban.query.filter_by(
+                    id_akreditasi=id_akreditasi,
+                    q_no=q_no
                 ).first()
-            else:
-                pertanyaan = LamEmba.query.filter_by(
-                    q_no=q_no,
-                    id_qs=id_qs
-                ).first()
 
-            if is_infokom:
-                skor_lpmi = (jawaban / 4) * pertanyaan.bobot
-            else:
-                skor_lpmi = jawaban
+                if not existing:
+                    error_items.append({
+                        "item": item,
+                        "reason": f"Jawaban user tidak ditemukan untuk pertanyaan {q_no}"
+                    })
+                    continue
 
-            existing = Jawaban.query.filter_by(
+                existing.jawaban_lpmi = jawaban
+                existing.skor_lpmi = skor_lpmi
+                if note_lpmi:
+                    existing.note_lpmi = note_lpmi
+                updated_count += 1
+
+            akreditasi.update_totals()
+            akreditasi.update_progress()
+
+        if dosen and not is_infokom:
+            emba_dosen = EmbaDosen.query.filter_by(
                 id_akreditasi=id_akreditasi,
-                q_no=q_no
+                user_role='LPMI'
             ).first()
+            
+            if not emba_dosen:
+                emba_dosen = EmbaDosen(
+                    id_akreditasi=id_akreditasi,
+                    user_role='LPMI'
+                )
+                db.session.add(emba_dosen)
 
-            if not existing:
-                error_items.append({
-                    "item": item,
-                    "reason": f"Jawaban user tidak ditemukan untuk pertanyaan {q_no}"
-                })
-                continue
-
-            existing.jawaban_lpmi = jawaban
-            existing.skor_lpmi = skor_lpmi
-            if note_lpmi:
-                existing.note_lpmi = note_lpmi
-            updated_count += 1
-
-        akreditasi.update_totals()
-        akreditasi.update_progress()
+            emba_dosen.dosen_total = dosen.get("dosen_total")
+            emba_dosen.dosen_tetap = dosen.get("dosen_tetap")
+            emba_dosen.dosen_doktor = dosen.get("dosen_doktor")
+            emba_dosen.dosen_magister = dosen.get("dosen_magister")
+            emba_dosen.dosen_guru_besar = dosen.get("dosen_guru_besar")
+            emba_dosen.dosen_lektor_kepala = dosen.get("dosen_lektor_kepala")
+            emba_dosen.dosen_lektor = dosen.get("dosen_lektor")
+            emba_dosen.dosen_publikasi = dosen.get("dosen_publikasi")
+            emba_dosen.dosen_sertifikat = dosen.get("dosen_sertifikat")
 
         if is_submit:
+
+            if is_infokom:
+                all_questions = LamInfokom.query.filter_by(id_qs=akreditasi.id_qs).all()
+            else:
+                all_questions = LamEmba.query.filter_by(id_qs=akreditasi.id_qs).all()
+
+            all_question_ids = {q.q_no for q in all_questions}
+
+            answered_ids = {
+                j.q_no for j in Jawaban.query.filter_by(id_akreditasi=id_akreditasi).all()
+            }
+
+            unanswered = list(all_question_ids - answered_ids)
+
+            if unanswered:
+                db.session.rollback()
+                return error_response(
+                    "Terdapat pertanyaan yang belum dijawab. Silakan lengkapi semua sebelum submit.",
+                    400,
+                    data={"unanswered_questions": unanswered}
+                )
+            
+            if not is_infokom:
+                required_dosen_fields = ['dosen_total', 'dosen_tetap', 'dosen_doktor', 'dosen_magister',
+                                        'dosen_guru_besar', 'dosen_lektor_kepala', 'dosen_lektor',
+                                        'dosen_publikasi', 'dosen_sertifikat']
+                
+                emba_dosen = EmbaDosen.query.filter_by(
+                    id_akreditasi=id_akreditasi,
+                    user_role='LPMI'
+                ).first()
+                
+                if emba_dosen:
+                    missing_fields = [field for field in required_dosen_fields 
+                                    if getattr(emba_dosen, field) is None]
+                    
+                    if missing_fields:
+                        db.session.rollback()
+                        return error_response(
+                            f"EMBA lecturer data is incomplete. The following fields are required: {', '.join(missing_fields)}",
+                            400
+                        )
+                else:
+                    return error_response(
+                        f"EMBA lecturer data is missing. Please complete all required fields before submitting",
+                        404
+                    )
+                    
             user_id = get_jwt_identity()
             akreditasi.id_validator = user_id
 
@@ -349,72 +586,163 @@ def review_assesor():
         id_qs = data.get("id_qs")
         jawaban_list = data.get("jawaban", [])
         is_submit = data.get("is_submit", False)
+        dosen = data.get('dosen')
+        evaluasi_integrasi = data.get("evaluasi_integrasi")
+        rekomendasi_ak = data.get("rekomendasi_ak")
+        catatan_assesor = data.get("catatan_assesor")
 
         if not id_akreditasi:
             return error_response("id_akreditasi wajib dikirim", 400)
 
         akreditasi = Akreditasi.query.get(id_akreditasi)
         if not akreditasi:
-            return error_response(f"Akreditasi dengan id {id_akreditasi} tidak ditemukan", 404)
+            return error_response(f"Akreditasi not found", 404)
 
-        if not isinstance(jawaban_list, list) or not jawaban_list:
-            return error_response("Data 'jawaban' harus berupa list dan tidak boleh kosong", 400)
+        # if not isinstance(jawaban_list, list) or not jawaban_list:
+        #     return error_response("Data 'jawaban' harus berupa list dan tidak boleh kosong", 400)
         
         is_infokom = akreditasi.question_set.id_lembaga == 1
 
         error_items = []
         updated_count = 0
 
-        for item in jawaban_list:
-            q_no = item.get("q_no")
-            jawaban = item.get("jawaban")
-            note_assesor = item.get("note")
+        if jawaban_list:
+            for item in jawaban_list:
+                q_no = item.get("q_no")
+                jawaban = item.get("jawaban")
+                note_assesor = item.get("note")
 
-            if not q_no:
-                error_items.append({
-                    "item": item,
-                    "reason": "q_no tidak ditemukan"
-                })
-                continue
+                if not q_no:
+                    error_items.append({
+                        "item": item,
+                        "reason": "q_no tidak ditemukan"
+                    })
+                    continue
 
-            if is_infokom:
-                pertanyaan = LamInfokom.query.filter_by(
-                    q_no=q_no,
-                    id_qs=id_qs
+                if is_infokom:
+                    pertanyaan = LamInfokom.query.filter_by(
+                        q_no=q_no,
+                        id_qs=id_qs
+                    ).first()
+                else:
+                    pertanyaan = LamEmba.query.filter_by(
+                        q_no=q_no,
+                        id_qs=id_qs
+                    ).first()
+                
+                if not pertanyaan:
+                    error_items.append({
+                        "item": item,
+                        "reason": f"Pertanyaan dengan q_no {q_no} tidak ditemukan"
+                    })
+                    continue
+                
+                if is_infokom:
+                    skor_assesor = (jawaban / 4) * pertanyaan.bobot
+                else:
+                    skor_assesor = jawaban
+                
+                existing = Jawaban.query.filter_by(
+                    id_akreditasi=id_akreditasi,
+                    q_no=q_no
                 ).first()
-            else:
-                pertanyaan = LamEmba.query.filter_by(
-                    q_no=q_no,
-                    id_qs=id_qs
-                ).first()
-            
-            if is_infokom:
-                skor_assesor = (jawaban / 4) * pertanyaan.bobot
-            else:
-                skor_assesor = jawaban
-            
-            existing = Jawaban.query.filter_by(
+
+                if not existing:
+                    error_items.append({
+                        "item": item,
+                        "reason": f"Jawaban user tidak ditemukan untuk pertanyaan {q_no}"
+                    })
+                    continue
+
+                existing.jawaban_assesor = jawaban
+                existing.skor_assesor = skor_assesor
+                if note_assesor:
+                    existing.note_assesor = note_assesor
+                updated_count += 1
+            akreditasi.update_totals()
+            akreditasi.update_progress()
+
+        if dosen and not is_infokom:
+            emba_dosen = EmbaDosen.query.filter_by(
                 id_akreditasi=id_akreditasi,
-                q_no=q_no
+                user_role='ASSESOR'
             ).first()
+            
+            if not emba_dosen:
+                emba_dosen = EmbaDosen(
+                    id_akreditasi=id_akreditasi,
+                    user_role='ASSESOR'
+                )
+                db.session.add(emba_dosen)
 
-            if not existing:
-                error_items.append({
-                    "item": item,
-                    "reason": f"Jawaban user tidak ditemukan untuk pertanyaan {q_no}"
-                })
-                continue
+            emba_dosen.dosen_total = dosen.get("dosen_total")
+            emba_dosen.dosen_tetap = dosen.get("dosen_tetap")
+            emba_dosen.dosen_doktor = dosen.get("dosen_doktor")
+            emba_dosen.dosen_magister = dosen.get("dosen_magister")
+            emba_dosen.dosen_guru_besar = dosen.get("dosen_guru_besar")
+            emba_dosen.dosen_lektor_kepala = dosen.get("dosen_lektor_kepala")
+            emba_dosen.dosen_lektor = dosen.get("dosen_lektor")
+            emba_dosen.dosen_publikasi = dosen.get("dosen_publikasi")
+            emba_dosen.dosen_sertifikat = dosen.get("dosen_sertifikat")
 
-            existing.jawaban_assesor = jawaban
-            existing.skor_assesor = skor_assesor
-            if note_assesor:
-                existing.note_assesor = note_assesor
-            updated_count += 1
+        akreditasi.evaluasi_integrasi = evaluasi_integrasi
+        akreditasi.rekomendasi_ak = rekomendasi_ak
+        akreditasi.catatan_assesor = catatan_assesor
 
-        akreditasi.update_totals()
-        akreditasi.update_progress()
+        if is_submit:
+            
+            if is_infokom:
+                all_questions = LamInfokom.query.filter_by(id_qs=akreditasi.id_qs).all()
+            else:
+                all_questions = LamEmba.query.filter_by(id_qs=akreditasi.id_qs).all()
+
+            all_question_ids = {q.q_no for q in all_questions}
+
+            answered_ids = {
+                j.q_no for j in Jawaban.query.filter_by(id_akreditasi=id_akreditasi).all()
+            }
+
+            unanswered = list(all_question_ids - answered_ids)
+
+            if unanswered:
+                db.session.rollback()
+                return error_response(
+                    "Terdapat pertanyaan yang belum dijawab. Silakan lengkapi semua sebelum submit.",
+                    400,
+                    data={"unanswered_questions": unanswered}
+                )
+            
+            if not is_infokom:
+                required_dosen_fields = ['dosen_total', 'dosen_tetap', 'dosen_doktor', 'dosen_magister',
+                                        'dosen_guru_besar', 'dosen_lektor_kepala', 'dosen_lektor',
+                                        'dosen_publikasi', 'dosen_sertifikat']
+                
+                emba_dosen = EmbaDosen.query.filter_by(
+                    id_akreditasi=id_akreditasi,
+                    user_role='ASSESOR'
+                ).first()
+                
+                if emba_dosen:
+                    missing_fields = [field for field in required_dosen_fields 
+                                    if getattr(emba_dosen, field) is None]
+                    
+                    if missing_fields:
+                        db.session.rollback()
+                        return error_response(
+                            f"EMBA lecturer data is incomplete. The following fields are required: {', '.join(missing_fields)}",
+                            400
+                        )
+                else:
+                    return error_response(
+                        f"EMBA lecturer data is missing. Please complete all required fields before submitting",
+                        404
+                    )
         
-        akreditasi.status = "Reviewed" if is_submit else "Reviewing"
+            user_id = get_jwt_identity()
+            akreditasi.id_assesor = user_id
+            akreditasi.status = "Reviewed"
+        else:
+            akreditasi.status = "Reviewing"
             
         akreditasi.tanggal_review = datetime.utcnow()
 

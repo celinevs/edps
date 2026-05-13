@@ -26,9 +26,10 @@ export const AkreditasiParamSchema = z.object({
     tahun_berlaku: z.string(),
     id_qs: z.string(),
     id_prodi: z.string(),
+    id_lembaga: z.number().optional(),
 });
 
-type AkreditasiFilter = z.infer<typeof AkreditasiParamSchema>
+export type AkreditasiFilter = z.infer<typeof AkreditasiParamSchema>
 
 function EventPage() {
     const router = useRouter();
@@ -38,6 +39,7 @@ function EventPage() {
     const [perPage, setPerPage] = useState(5)
     const [akreditasi, setAkreditasi] = useState<Akreditasi[]>([]);
     const [prodi, setProdi] = useState<GetProdi[]>([]);
+    const [tahun, setTahun] = useState<string[]>([]);
     const { data: prodiData } = useGetProdiQuery();
     const { data: tahunData } = useGetTahunBerlakuQuery({ id_prodi: user?.id_prodi || undefined });
 
@@ -45,7 +47,8 @@ function EventPage() {
         tahun_berlaku: '',
         id_qs: '',
         id_prodi: '',
-        fakultas: ''
+        fakultas: '',
+        id_lembaga: undefined
     }
 
     const { control, formState, handleSubmit, setValue, setError, trigger, watch, reset } = useForm<AkreditasiFilter>({
@@ -68,6 +71,7 @@ function EventPage() {
     const { data } = useGetAkreditasiQuery({
         page: page + 1,
         per_page: perPage,
+        available: true,
         id_prodi: filters.id_prodi || undefined,
         tahun_berlaku: filters.tahun_berlaku || undefined,
         fakultas: filters.fakultas || undefined,
@@ -90,6 +94,12 @@ function EventPage() {
             setProdi(prodiData.data)
         }
     }, [prodiData])
+
+    useEffect(() => {
+        if (tahunData?.data) {
+            setTahun(tahunData.data)
+        }
+    })
 
     const handleView = (row: Akreditasi) => {
         sessionStorage.setItem('formData', JSON.stringify({
@@ -152,7 +162,7 @@ function EventPage() {
             id: 'total_skor_lpmi',
             label: 'LPMI',
             render: (row) =>
-                row.total_skor_lpmi === 0
+                !["Validated", "Reviewed", "Reviewing"].includes(row.status || "")
                     ? '-'
                     : `${row.total_skor_lpmi}/${row.question_set.total_max_bobot}`,
         },
@@ -160,7 +170,7 @@ function EventPage() {
             id: 'total_skor_assesor',
             label: 'Assesor',
             render: (row) =>
-                row.total_skor_assesor === 0
+                !["Reviewed"].includes(row.status || "")
                     ? '-'
                     : `${row.total_skor_assesor}/${row.question_set.total_max_bobot}`,
         },
@@ -230,7 +240,7 @@ function EventPage() {
                             {row.status == 'In Progress' ? 'Edit Form' : 'Review'}
                         </Button>
                     }
-                    {(user?.role == "SUPERADMIN" || user?.role == "LPMI") &&
+                    {(user?.role == "SUPERADMIN" || user?.role == "LPMI" || user?.role == "UPPS") &&
                         <Button
                             size="small"
                             variant="contained"
@@ -265,7 +275,7 @@ function EventPage() {
 
     return (
         <>
-            <Grid container justifyContent="space-between">
+            <Grid container justifyContent="space-between" mb={1}>
                 <Grid>
                     <Typography
                         variant="h4"
@@ -279,29 +289,53 @@ function EventPage() {
                         Event
                     </Typography>
                 </Grid>
-                <Grid>
-                    {!user?.nama_prodi &&
+                <Grid container gap={0.5}>
+                    <Grid>
+                        {!user?.nama_prodi &&
+                            <DropdownInputController
+                                name="id_prodi"
+                                control={control}
+                                label="Prodi"
+                                size='small'
+                                sx={{
+                                    "& .MuiInputBase-root": {
+                                        width: 200
+                                    }
+                                }}
+                            >
+                                {prodi.map((category) => (
+                                    <MenuItem
+                                        key={String(category.id_prodi)}
+                                        value={String(category.id_prodi)}
+                                    >
+                                        {category.nama_prodi}
+                                    </MenuItem>
+                                ))}
+                            </DropdownInputController>
+                        }
+                    </Grid>
+                    <Grid>
                         <DropdownInputController
-                            name="id_prodi"
+                            name="tahun_berlaku"
                             control={control}
-                            label="Prodi"
+                            label="Tahun Berlaku"
+                            size='small'
                             sx={{
                                 "& .MuiInputBase-root": {
-                                    height: 36,
                                     width: 200
                                 }
                             }}
                         >
-                            {prodi.map((category) => (
+                            {tahun.map((category) => (
                                 <MenuItem
-                                    key={String(category.id_prodi)}
-                                    value={String(category.id_prodi)}
+                                    key={String(category)}
+                                    value={String(category)}
                                 >
-                                    {category.nama_prodi}
+                                    {category}
                                 </MenuItem>
                             ))}
                         </DropdownInputController>
-                    }
+                    </Grid>
                 </Grid>
             </Grid>
 

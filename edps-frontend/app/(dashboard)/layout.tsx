@@ -7,7 +7,7 @@ import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 const sidebarItems = [
-  { label: "Home", href: "/home", icon: <HomeOutlinedIcon />, requiredRole: ['SUPERADMIN', 'LPMI'] },
+  { label: "Home", href: "/home", icon: <HomeOutlinedIcon />, requiredRole: ['SUPERADMIN', 'LPMI', 'UPPS', 'ADMIN'] },
   { label: "User", href: "/user", icon: <PersonIcon />, requiredRole: ['ADMIN', 'SUPERADMIN'] },
   { label: "Dashboard", href: "/dashboard", icon: <DashboardIcon />, requiredRole: [ 'SUPERADMIN', 'UPPS', 'LPMI', 'PRODI'] },
   { label: "Event", href: "/event", icon: <BorderColorIcon />, requiredRole: ['SUPERADMIN', 'UPPS', 'LPMI', 'PRODI'] },

@@ -1,8 +1,12 @@
 import React from "react";
 import { Controller, Control } from "react-hook-form";
-import { Select, FormControl, FormHelperText, InputLabel, SxProps, Theme} from "@mui/material";
+import { 
+  Select, FormControl, FormHelperText, InputLabel, 
+  SxProps, Theme, SelectProps, IconButton, InputAdornment 
+} from "@mui/material";
+import ClearIcon from "@mui/icons-material/Clear";
 
-interface DropdownInputControllerProps {
+interface DropdownInputControllerProps extends Omit<SelectProps, 'value' | 'onChange' | 'disabled' | 'label'> {
   name: string;
   control: Control<any>;
   label: string;
@@ -10,6 +14,7 @@ interface DropdownInputControllerProps {
   disabled?: boolean;
   children: React.ReactNode;
   sx?: SxProps<Theme>;
+  showClearButton?: boolean;
 }
 
 const DropdownInputController: React.FC<DropdownInputControllerProps> = ({
@@ -20,7 +25,8 @@ const DropdownInputController: React.FC<DropdownInputControllerProps> = ({
   children,
   disabled,
   sx,
-  ...props
+  showClearButton = true,
+  ...selectProps
 }) => {
   return (
     <Controller
@@ -32,11 +38,26 @@ const DropdownInputController: React.FC<DropdownInputControllerProps> = ({
           <InputLabel>{label}</InputLabel>
           <Select
             {...field}
-            {...props}
+            {...selectProps}
             label={label}
             value={field.value || ""}
             disabled={disabled}
             onChange={(e) => field.onChange(e.target.value)}
+            endAdornment={
+              showClearButton && field.value ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    onClick={() => field.onChange("")}
+                    onMouseDown={(e) => e.preventDefault()}
+                    edge="end"
+                    sx={{ mr: 2 }}
+                  >
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ) : null
+            }
           >
             {children}
           </Select>

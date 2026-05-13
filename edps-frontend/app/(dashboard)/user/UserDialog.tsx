@@ -219,6 +219,7 @@ function UserDialog(props: UserDialogProps) {
                     onClose={() => setSnackbar({ ...snackbar, open: false })}
                     severity={snackbar.severity}
                     sx={{ width: '100%' }}
+                    variant="filled"
                 >
                     {snackbar.message}
                 </Alert>

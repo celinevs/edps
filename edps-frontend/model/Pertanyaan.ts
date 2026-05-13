@@ -7,6 +7,8 @@ export interface Pertanyaan {
   id_pertanyaan: string;
   deskripsi_pertanyaan: string;
   bobot: number;
+  no_butir: string;
+  no_kriteria: string;
   kode_kriteria: string;
   elemen_penilaian_lam: string;
   indikator_jawaban: IndikatorJawaban[];

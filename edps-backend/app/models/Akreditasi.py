@@ -32,11 +32,16 @@ class Akreditasi(db.Model):
     total_skor_prodi = db.Column(db.Float, default=0, nullable=False)
     total_skor_assesor = db.Column(db.Float, default=0, nullable=False)
 
+    evaluasi_integrasi = db.Column(db.Text, nullable=True)
+    rekomendasi_ak = db.Column(db.Text, nullable=True)
+    catatan_assesor = db.Column(db.Text, nullable=True)
+
     jawaban = db.relationship("Jawaban", back_populates="akreditasi", cascade="all, delete-orphan")
     question_set = db.relationship("QuestionSet", back_populates="akreditasi")
     prodi = db.relationship("Prodi", back_populates="akreditasi")
     pengisi = db.relationship("User", foreign_keys=[id_pengisi])
     validator = db.relationship("User", foreign_keys=[id_validator])
+    emba_dosen = db.relationship("EmbaDosen", back_populates="akreditasi")
 
     def update_totals(self):
         """Update both stored total scores for this period"""

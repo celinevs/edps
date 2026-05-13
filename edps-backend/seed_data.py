@@ -162,6 +162,7 @@ def seed_data():
     infokom_questions = [
     {
         "q_no": 1,
+        'no_kriteria': '1',
         "kode": "K1",
         "kriteria": "Visi dan Misi",
         "elemen": "Kejelasan dan kesesuaian visi misi",
@@ -176,6 +177,7 @@ def seed_data():
     },
     {
         "q_no": 2,
+        'no_kriteria': '2',
         "kode": "K2",
         "kriteria": "Tata Pamong",
         "elemen": "Sistem tata kelola",
@@ -190,6 +192,7 @@ def seed_data():
     },
     {
         "q_no": 3,
+        'no_kriteria': '3',
         "kode": "K3",
         "kriteria": "Mahasiswa",
         "elemen": "Kualitas mahasiswa",
@@ -210,6 +213,7 @@ def seed_data():
             id_qinfokom=str(uuid.uuid4()),
             id_qs=qs_infokom.id_qs,
             q_no=q["q_no"],
+            no_kriteria= q['no_kriteria'],
             kode_kriteria=q["kode"],
             kriteria=q["kriteria"],
             jenis = 'I',
@@ -231,29 +235,69 @@ def seed_data():
     emba_questions = [
     {
         "q_no": 1,
+        "no_butir": "1.a",
         "kode": "E1",
-        "kriteria": "Visi",
-        "deskripsi": "Kejelasan visi program studi"
+        "kriteria": "Visi, Misi, Tujuan",
+        "dimensi": "Visi",
+        "deskripsi": "Kejelasan, konsistensi, dan relevansi visi program studi terhadap kebutuhan industri dan masyarakat",
     },
     {
         "q_no": 2,
+        "no_butir": "1.a",
         "kode": "E2",
-        "kriteria": "Misi",
-        "deskripsi": "Kesesuaian misi dengan visi"
+        "kriteria": "Visi, Misi, Tujuan",
+        "dimensi": "Misi",
+        "deskripsi": "Kesesuaian misi dengan visi serta implementasinya dalam kegiatan tridharma",
     },
     {
         "q_no": 3,
+        "no_butir": "1.a",
         "kode": "E3",
         "kriteria": "Kurikulum",
-        "deskripsi": "Kesesuaian kurikulum dengan industri"
+        "dimensi": "Perancangan Kurikulum",
+        "deskripsi": "Kesesuaian kurikulum dengan kebutuhan industri, perkembangan ilmu pengetahuan, dan standar nasional",
     },
     {
         "q_no": 4,
+        "no_butir": "1.b",
         "kode": "E4",
+        "kriteria": "Kurikulum",
+        "dimensi": "Implementasi Kurikulum",
+        "deskripsi": "Efektivitas implementasi kurikulum dalam proses pembelajaran",
+    },
+    {
+        "q_no": 5,
+        "no_butir": "1.b",
+        "kode": "E5",
         "kriteria": "Penelitian",
-        "deskripsi": "Produktivitas penelitian"
+        "dimensi": "Produktivitas",
+        "deskripsi": "Jumlah dan kualitas publikasi ilmiah dosen dan mahasiswa",
+    },
+    {
+        "q_no": 6,
+        "no_butir": "1.c",
+        "kode": "E6",
+        "kriteria": "Penelitian",
+        "dimensi": "Relevansi",
+        "deskripsi": "Kesesuaian topik penelitian dengan kebutuhan industri dan masyarakat",
+    },
+    {
+        "q_no": 7,
+        "no_butir": "1.c",
+        "kode": "E7",
+        "kriteria": "Sumber Daya Manusia",
+        "dimensi": "Dosen",
+        "deskripsi": "Kualifikasi akademik dan kompetensi dosen",
+    },
+    {
+        "q_no": 8,
+        "no_butir": "1.c",
+        "kode": "E8",
+        "kriteria": "Sumber Daya Manusia",
+        "dimensi": "Tenaga Kependidikan",
+        "deskripsi": "Ketersediaan dan kompetensi tenaga kependidikan",
     }
-    ]
+]
     emba_objects = []
     for q in emba_questions:
         emba_objects.append(
@@ -261,14 +305,17 @@ def seed_data():
             id_qemba=str(uuid.uuid4()),
             id_qs=qs_emba.id_qs,
             q_no=q["q_no"],
+            no_butir=q["no_butir"],
             kode_kriteria=q["kode"],
             kriteria=q["kriteria"],
+            dimensi=q["dimensi"],
             deskripsi_pertanyaan=q["deskripsi"],
+            bobot=1,
             mandatory=True
         )
-        )
-        db.session.add_all(emba_objects)
-        db.session.commit()
+    )
+    db.session.add_all(emba_objects)
+    db.session.commit()
     
 
     # =========================
