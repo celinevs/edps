@@ -110,6 +110,9 @@ export interface WeightSummary {
     detail: WeightDetailInfokom[];
     kriteria_detail: KriteriaTable[];
     total_questions: number;
+    answered_questions: number;
+    lpmi_answered: number;
+    assesor_answered: number;
 
     nama_pengisi: string | null;
     nama_validator: string | null;
@@ -123,52 +126,62 @@ export interface WeightSummary {
     tanggal_review: string;
 
     max_points: number;
+    total_points: number;
 }
 
 export interface TableItem {
-  weight: number;
-  total_questions: number;
-  prodi: number;
-  lpmi: number;
-  assesor: number;
-  last_to_assesor: number;
-  last_to_max: number;
-  this_to_assesor: number;
-  this_to_max: number;
-  percentage: number;
+    weight: number;
+    total_questions: number;
+    prodi: number;
+    lpmi: number;
+    assesor: number;
+    last_to_assesor: number;
+    last_to_max: number;
+    this_to_assesor: number;
+    this_to_max: number;
+    percentage: number;
 }
 
 export interface TableItem2 {
-  kriteria: string;
-  total_pertanyaan: number;
-  total_prodi: number;
-  total_lpmi: number;
-  total_assesor: number;
-  max_weight: number;
-  mandatory_pass: boolean;
+    kriteria: string;
+    total_pertanyaan: number;
+    total_prodi: number;
+    total_lpmi: number;
+    total_assesor: number;
+    max_weight: number;
+    mandatory_pass: boolean;
 }
 
 export interface Chart {
-  labels: string[];
-  datasets: ChartDataset;
+    labels: string[];
+    datasets: ChartDataset;
 }
 
 export interface ChartDataset {
-  prodi: number[];
-  lpmi: number[];
-  assesor: number[];
+    prodi: number[];
+    lpmi: number[];
+    assesor: number[];
+}
+
+export interface GapHeatmap {
+    criteria: string;
+    lpmi_vs_assesor: number;
+    prodi_vs_lpmi: number;
+
 }
 
 export interface DashboardInfokom {
-  table: TableItem[];
-  radar: Chart;
-  bar: Chart;
+    table: TableItem[];
+    radar: Chart;
+    bar: Chart;
+    consistency: number;
 }
 
 export interface DashboardEmba {
-  table: TableItem2[];
-  radar: Chart;
-  bar: Chart;
+    table: TableItem2[];
+    radar: Chart;
+    bar: Chart;
+    consistency: number;
 }
 
 export interface AkreditasiHelp {
@@ -180,4 +193,60 @@ export interface AkreditasiHelp {
     link?: string;
     deskripsi_gambar?: string;
     gambar_path?: string;
+}
+
+export interface ReportData {
+    bar_data: BarReport[]
+    indicator_table: IndicatorTable[]
+    radar: RadarReport
+    risk_per_major: RiskPerMajor[]
+}
+
+export interface BarReport {
+    [key: string]: string | number
+    LAM: string
+    major: string
+    total_assesor: number
+    total_lpmi: number
+    total_prodi: number
+}
+
+export interface IndicatorTable {
+    LAM: string
+    major: string
+    indikator_u: number
+    indikator_m: number
+    indikator_bm: number
+    melampaui: number
+    memenuhi: number
+    belum_memenuhi: number
+    jumlah: number
+}
+
+
+export interface RadarReport {
+    labels: string[]
+    datasets: RadarDatasets
+}
+
+export interface RadarDatasets {
+    u: number[]
+    m: number[]
+    bm: number[]
+}
+
+
+export interface RiskPerMajor {
+    major: string
+
+    n_exams: number
+
+    risk_level_combined:
+    | "Low"
+    | "Medium"
+    | "High"
+
+    risk_score_combined: number
+    total_bobot: number
+    year: string
 }

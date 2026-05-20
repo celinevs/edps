@@ -42,6 +42,7 @@ function EventPage() {
     const [tahun, setTahun] = useState<string[]>([]);
     const { data: prodiData } = useGetProdiQuery();
     const { data: tahunData } = useGetTahunBerlakuQuery({ id_prodi: user?.id_prodi || undefined });
+    const today = new Date();
 
     const defaultValues: AkreditasiFilter = {
         tahun_berlaku: '',
@@ -80,7 +81,12 @@ function EventPage() {
 
     useEffect(() => {
         setPage(0);
-    }, [filters]);
+    }, [
+        filters.id_prodi,
+        filters.tahun_berlaku,
+        filters.fakultas,
+        filters.id_qs,
+    ]);
 
     useEffect(() => {
         if (data?.data) {
@@ -109,7 +115,8 @@ function EventPage() {
             nama_periode: row.nama_akreditasi,
             tanggal_selesai: row.tanggal_selesai,
             total_max_bobot: row.question_set.total_max_bobot,
-            lembaga: row.question_set.id_lembaga
+            lembaga: row.question_set.id_lembaga,
+            closed: today > new Date(row.tanggal_selesai)
         }));
 
         router.push('/form');
@@ -124,7 +131,8 @@ function EventPage() {
             tanggal_selesai: row.tanggal_selesai,
             total_max_bobot: row.question_set.total_max_bobot,
             is_lpmi: true,
-            lembaga: row.question_set.id_lembaga
+            lembaga: row.question_set.id_lembaga,
+            closed: today > new Date(row.tanggal_selesai)
         }));
 
         router.push('/form');
@@ -227,6 +235,31 @@ function EventPage() {
         },
         { id: 'status', label: 'Status' },
         {
+            id: 'deadline_status',
+            label: 'Deadline Status',
+            render: (row) => {
+                const dueDate = new Date(row.tanggal_selesai);
+
+                const isClosed = today > dueDate;
+
+                return (
+                    <Box
+                        sx={{
+                            px: 1.5,
+                            py: 0.5,
+                            borderRadius: 2,
+                            fontWeight: 600,
+                            display: 'inline-block',
+                            color: isClosed ? '#fff' : '#1b5e20',
+                            backgroundColor: isClosed ? '#d32f2f' : '#c8e6c9',
+                        }}
+                    >
+                        {isClosed ? 'Closed' : 'Open'}
+                    </Box>
+                );
+            },
+        },
+        {
             id: 'actions',
             label: 'Actions',
             render: (row) => (
@@ -237,7 +270,7 @@ function EventPage() {
                             variant="contained"
                             onClick={() => handleView(row)}
                         >
-                            {row.status == 'In Progress' ? 'Edit Form' : 'Review'}
+                            {row.status == 'In Progress' && !(today > new Date(row.tanggal_selesai)) ? 'Edit Form' : 'Review'}
                         </Button>
                     }
                     {(user?.role == "SUPERADMIN" || user?.role == "LPMI" || user?.role == "UPPS") &&
@@ -246,7 +279,7 @@ function EventPage() {
                             variant="contained"
                             onClick={() => handleValidation(row)}
                         >
-                            {(row.status == 'Submitted' || row.status == 'Validating') ? 'Validate Form' : 'Review'}
+                            {((row.status == 'Submitted' || row.status == 'Validating') && !(today > new Date(row.tanggal_selesai))) ? 'Validate Form' : 'Review'}
                         </Button>
                     }
 
@@ -254,7 +287,6 @@ function EventPage() {
                         size="small"
                         variant="contained"
                         onClick={() => handleAnalytic(row)}
-                        disabled={row.status != 'Reviewed'}
                     >
                         View Analytic
                     </Button>

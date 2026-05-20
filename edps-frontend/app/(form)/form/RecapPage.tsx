@@ -165,16 +165,6 @@ function RecapPage({
                             </Grid>
 
                             <Grid size={5}>
-                                <Typography>Pemenuhan syarat kualitikasi dosen</Typography>
-                            </Grid>
-
-                            <Grid size={7}>
-                                <Typography>
-                                    : Melampaui (Dummy)
-                                </Typography>
-                            </Grid>
-
-                            <Grid size={5}>
                                 <Typography>Evaluasi Terintegrasi</Typography>
                             </Grid>
                             <Grid size={7}>

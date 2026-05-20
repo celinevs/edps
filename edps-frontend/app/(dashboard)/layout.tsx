@@ -14,6 +14,8 @@ const sidebarItems = [
   { label: "Accreditation Management", href: "/acc-management", icon: <DashboardIcon />, requiredRole: ['ADMIN', 'SUPERADMIN'] },
   { label: "Accreditation’s Question", href: "/question-list", icon: <CloudUploadOutlinedIcon />, requiredRole: ['ADMIN', 'SUPERADMIN'] },
   { label: "Score Input Queue", href: "/assesor", icon: <UploadFileIcon />, requiredRole: ['ADMIN', 'SUPERADMIN'] },
+  { label: "Report", href: "/report", icon: <UploadFileIcon />, requiredRole: ['ADMIN', 'SUPERADMIN', 'LPMI', 'UPPS'] },
+  { label: "ML", href: "/ml", icon: <UploadFileIcon />, requiredRole: ['SUPERADMIN'] },
 ];
 
 export default function DashboardLayout({

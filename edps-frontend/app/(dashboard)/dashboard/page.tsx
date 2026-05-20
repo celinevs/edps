@@ -5,7 +5,7 @@ import { useAuth } from "@/app/service/hooks/useAuth";
 import { Akreditasi, DashboardInfokom, TableItem, TableItem2, DashboardEmba } from "@/model/Akreditasi";
 import { Lembaga } from "@/model/Lembaga";
 import { GetProdi } from "@/model/Prodi";
-import { useLazyGetDashboardEmbaDetailQuery, useLazyGetDashboardInfokomDetailQuery, useGetAkreditasiDropdownQuery} from "@/api/akreditasi";
+import { useLazyGetDashboardEmbaDetailQuery, useLazyGetDashboardInfokomDetailQuery, useGetAkreditasiDropdownQuery } from "@/api/akreditasi";
 import { useGetLembagaQuery } from "@/api/lembaga";
 import { useLazyGetProdiQuery } from "@/api/prodi";
 import {
@@ -55,6 +55,23 @@ function DashboardPage() {
   const { data: lembagaData } = useGetLembagaQuery(selectedProdi);
   const { data: akreditasiData } = useGetAkreditasiDropdownQuery({ id_prodi: selectedProdi, id_lembaga: selectedLembaga });
   const dashboardData = dashboardInfokom || dashboardEmba;
+  const radarLabels =
+    dashboardData?.radar?.labels ?? [];
+
+  const radarProdi =
+    dashboardData?.radar?.datasets?.prodi ?? [];
+
+  const radarLpmi =
+    dashboardData?.radar?.datasets?.lpmi ?? [];
+
+  const radarAssesor =
+    dashboardData?.radar?.datasets?.assesor ?? [];
+
+  const isRadarValid =
+    radarLabels.length >= 2 &&
+    radarProdi.length === radarLabels.length &&
+    radarLpmi.length === radarLabels.length &&
+    radarAssesor.length === radarLabels.length;
 
   useEffect(() => {
     if (lembagaData?.data) {
@@ -269,21 +286,23 @@ function DashboardPage() {
 
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-            {isPass ? (
-              <>
-                <CheckIcon sx={{ color: 'success.main' }} />
-                <Typography sx={{ color: 'success.main', fontWeight: 500 }}>
-                  Pass
-                </Typography>
-              </>
-            ) : (
-              <>
-                <ClearIcon sx={{ color: 'error.main' }} />
-                <Typography sx={{ color: 'error.main', fontWeight: 500 }}>
-                  Fail
-                </Typography>
-              </>
-            )}
+            {row.total_assesor === null || row.total_lpmi == null
+              ? '-' :
+              isPass ? (
+                <>
+                  <CheckIcon sx={{ color: 'success.main' }} />
+                  <Typography sx={{ color: 'success.main', fontWeight: 500 }}>
+                    Pass
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <ClearIcon sx={{ color: 'error.main' }} />
+                  <Typography sx={{ color: 'error.main', fontWeight: 500 }}>
+                    Fail
+                  </Typography>
+                </>
+              )}
           </Box>
         );
       },
@@ -308,12 +327,25 @@ function DashboardPage() {
         }
 
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-            {icon}
+          row.total_lpmi == null || row.total_assesor == null ? (
             <Typography>
-              {label}
+              -
             </Typography>
-          </Box>
+          ) : (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1
+              }}
+            >
+              {icon}
+              <Typography>
+                {label}
+              </Typography>
+            </Box>
+          )
         );
       },
     },
@@ -439,7 +471,7 @@ function DashboardPage() {
           <Grid container spacing={2}>
 
             {/* RADAR EMPTY */}
-            <Grid size={4}>
+            <Grid size={4.5}>
               <Box
                 sx={{
                   background: "#fff",
@@ -475,7 +507,7 @@ function DashboardPage() {
             </Grid>
 
             {/* GAP HEATMAP EMPTY */}
-            <Grid size={4}>
+            <Grid size={3}>
               <Box
                 sx={{
                   background: "#fff",
@@ -511,7 +543,7 @@ function DashboardPage() {
             </Grid>
 
             {/* BAR EMPTY */}
-            <Grid size={4}>
+            <Grid size={4.5}>
               <Box
                 sx={{
                   background: "#fff",
@@ -581,7 +613,7 @@ function DashboardPage() {
           <Grid container spacing={2}>
 
             {/* RADAR */}
-            <Grid size={4}>
+            <Grid size={4.5}>
               <Box
                 sx={{
                   background: "#fff",
@@ -595,35 +627,57 @@ function DashboardPage() {
                   Assessment Radar
                 </Typography>
 
-                <RadarChart
-                  height={300}
-                  series={[
-                    {
-                      label: 'Prodi',
-                      data: dashboardData?.radar?.datasets?.prodi || [],
-                      fillArea: true,
-                    },
-                    {
-                      label: 'LPMI',
-                      data: dashboardData?.radar?.datasets?.lpmi || [],
-                      fillArea: true,
-                    },
-                    {
-                      label: 'Assesor',
-                      data: dashboardData?.radar?.datasets?.assesor || [],
-                      fillArea: true,
-                    },
-                  ]}
-                  radar={{
-                    max: 100,
-                    metrics: dashboardData?.radar?.labels || []
-                  }}
-                />
+                {isRadarValid ? (
+                  <RadarChart
+                    key={selectedAkreditasi}
+                    height={300}
+                    series={[
+                      {
+                        label: "Prodi",
+                        data: radarProdi,
+                        fillArea: true,
+                      },
+                      {
+                        label: "LPMI",
+                        data: radarLpmi,
+                        fillArea: true,
+                      },
+                      {
+                        label: "Assesor",
+                        data: radarAssesor,
+                        fillArea: true,
+                      },
+                    ]}
+                    radar={{
+                      max: 100,
+                      metrics: radarLabels,
+                    }}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      height: 300,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexDirection: "column",
+                      color: "text.secondary",
+                    }}
+                  >
+                    <Typography variant="body1" fontWeight={600}>
+                      Not Enough Radar Data
+                    </Typography>
+
+                    <Typography variant="body2">
+                      Radar chart requires at least 2 criteria
+                    </Typography>
+                  </Box>
+                )}
               </Box>
             </Grid>
 
             {/* GAP HEATMAP */}
-            <Grid size={4}>
+            <Grid size={3}>
               <Box
                 sx={{
                   background: "#fff",
@@ -704,7 +758,7 @@ function DashboardPage() {
             </Grid>
 
             {/* BAR CHART */}
-            <Grid size={4}>
+            <Grid size={4.5}>
               <Box
                 sx={{
                   background: "#fff",
@@ -763,7 +817,11 @@ function DashboardPage() {
               </Typography>
 
               <Typography variant="h4" fontWeight={700}>
-                82%
+                {dashboardData?.consistency != null
+                  ? `${Number(
+                    dashboardData.consistency
+                  ).toFixed(2)}%`
+                  : "-"}
               </Typography>
             </Box>
           </Grid>
@@ -782,7 +840,7 @@ function DashboardPage() {
               </Typography>
 
               <Typography variant="h4" fontWeight={700}>
-                -1.0
+                -1.25
               </Typography>
             </Box>
           </Grid>
@@ -804,7 +862,7 @@ function DashboardPage() {
                 {(dashboardData as any)?.prediction?.predicted_score != null
                   ? Number(
                     (dashboardData as any).prediction.predicted_score
-                  ).toFixed(2)
+                  ).toFixed(3)
                   : "-"}
               </Typography>
             </Box>
@@ -820,11 +878,11 @@ function DashboardPage() {
               }}
             >
               <Typography variant="body2">
-                Benchmark Status
+                Risk Level
               </Typography>
 
               <Typography variant="h4" fontWeight={700}>
-                Good
+                Low
               </Typography>
             </Box>
           </Grid>
@@ -838,7 +896,6 @@ function DashboardPage() {
               gutterBottom
               sx={{
                 fontWeight: 700,
-                mb: 3,
                 color: 'primary.main',
               }}
             >
@@ -859,7 +916,6 @@ function DashboardPage() {
               gutterBottom
               sx={{
                 fontWeight: 700,
-                mb: 3,
                 color: 'primary.main',
               }}
             >

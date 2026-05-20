@@ -1,5 +1,5 @@
 "use client";
-import { Box, Typography, Grid, LinearProgress } from "@mui/material";
+import { Box, Typography, Grid, LinearProgress, Paper, Chip } from "@mui/material";
 import CheckIcon from '@mui/icons-material/Check';
 import ClearIcon from '@mui/icons-material/Clear';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { WeightSummary, WeightDetailInfokom, DetailQuestion, KriteriaDetail, KriteriaTable } from "@/model/Akreditasi";
 import { useLazyGetWeightSummaryInfokomQuery, useLazyGetWeightSummaryEmbaQuery } from "@/api/akreditasi";
-// import { WeightSummary, WeightDetail } from "@/model/Periode";
 import { formatDate } from "@/app/service/utils/func";
 import NoPaginationTable, { Column } from "@/app/component/table/NoPaginationTable";
 import CollapsibleTable from "@/app/component/table/CollapsibleTable";
@@ -27,14 +26,36 @@ interface FormData {
 function AnalyticPage() {
     const [formData, setFormData] = useState<FormData | null>(null);
     const [weightSummary, setWeightSummary] = useState<WeightSummary>();
+    const [loading, setLoading] = useState(true);
     const router = useRouter();
-    // const { data } = useGetWeightSummaryQuery(formData?.id_periode || '');
     const [getWeightSummaryInfokom] = useLazyGetWeightSummaryInfokomQuery();
     const [getWeightSummaryEmba] = useLazyGetWeightSummaryEmbaQuery();
+    const [status, setStatus] = useState<{
+        label: string;
+        color: | "default" | "success" | "warning" | "info" | "error" | "primary" | "secondary";
+    }>
+        ({
+            label: "",
+            color: "default"
+        });
+
+    useEffect(() => {
+        if (formData?.status == 'Reviewed') {
+            setStatus({
+                label: "Complete",
+                color: "success"
+            });
+        } else {
+            setStatus({
+                label: formData?.status || "No Status",
+                color: "warning"
+            });
+        }
+    }, [formData]);
     const hiddenColumns: Record<number, { criteria: string[]; detail: string[] }> = {
         1: {
             criteria: ['mandatory_pass', 'predict'],
-            detail: ['q_no', 'dimensi', 'warning','mandatory_pass', 'predict'],
+            detail: ['q_no', 'dimensi', 'warning', 'mandatory_pass', 'predict'],
         },
         2: {
             criteria: [],
@@ -54,6 +75,7 @@ function AnalyticPage() {
         if (!formData?.id_periode) return;
 
         const fetchData = async () => {
+            setLoading(true);
             try {
                 if (formData?.lembaga == 1) {
                     const response = await getWeightSummaryInfokom(formData.id_periode).unwrap();
@@ -65,6 +87,9 @@ function AnalyticPage() {
                 }
             } catch (err) {
                 console.error("ERROR:", err);
+                setWeightSummary(undefined);
+            } finally {
+                setLoading(false);
             }
         };
 
@@ -73,38 +98,52 @@ function AnalyticPage() {
 
     const columns: Column<WeightSummary>[] = [
         {
-            id: 'weight',
-            label: 'Weight',
-            align: 'center',
-            render: (row) =>
-                '...',
+            id: 'total_points',
+            label: 'Total Weight',
+            align: 'center'
         },
-        { id: 'total_questions', label: 'Question', align: 'center' },
-        { id: 'max_points', label: 'Max Points', align: 'center' },
+        {
+            id: 'answered_questions',
+            label: 'Prodi Answered',
+            align: 'center',
+            render: (row) => `${row.answered_questions}/${row.total_questions}`
+        },
+        {
+            id: 'lpmi_answered',
+            label: 'LPMI Answered',
+            align: 'center',
+            render: (row) => `${row.lpmi_answered}/${row.total_questions}`
+        },
+        {
+            id: 'assesor_answered',
+            label: 'Assesor Answered',
+            align: 'center',
+            render: (row) => `${row.assesor_answered}/${row.total_questions}`
+        },
         {
             id: 'total_prodi',
-            label: 'Prodi',
+            label: 'Prodi Score',
             align: 'center',
             render: (row) =>
-                row.total_prodi === 0
+                row.total_prodi === undefined || row.total_prodi === null
                     ? '-'
                     : `${row.total_prodi}/${row.max_points}`,
         },
         {
             id: 'total_lpmi',
-            label: 'LPMI',
+            label: 'LPMI Score',
             align: 'center',
             render: (row) =>
-                row.total_lpmi === 0
+               row.total_lpmi === undefined || row.total_lpmi === null
                     ? '-'
                     : `${row.total_lpmi}/${row.max_points}`,
         },
         {
             id: 'total_assesor',
-            label: 'Assesor',
+            label: 'Assesor Score',
             align: 'center',
             render: (row) =>
-                row.total_assesor === 0
+                row.total_assesor === undefined || row.total_assesor === null
                     ? '-'
                     : `${row.total_assesor}/${row.max_points}`,
         },
@@ -113,7 +152,7 @@ function AnalyticPage() {
             label: 'Gap',
             align: 'center',
             render: (row) =>
-                (row.total_lpmi === 0 || row.total_assesor === 0)
+                (row.total_lpmi === null || row.total_assesor === null)
                     ? '-'
                     : `${row.max_points - row.total_assesor}`,
         },
@@ -267,21 +306,23 @@ function AnalyticPage() {
 
                 return (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                        {isPass ? (
-                            <>
-                                <CheckIcon sx={{ color: 'success.main' }} />
-                                <Typography sx={{ color: 'success.main', fontWeight: 500 }}>
-                                    Pass
-                                </Typography>
-                            </>
-                        ) : (
-                            <>
-                                <ClearIcon sx={{ color: 'error.main' }} />
-                                <Typography sx={{ color: 'error.main', fontWeight: 500 }}>
-                                    Fail
-                                </Typography>
-                            </>
-                        )}
+                        {row.total_assesor === undefined || row.total_assesor === null ? '-'
+                            :
+                            isPass ? (
+                                <>
+                                    <CheckIcon sx={{ color: 'success.main' }} />
+                                    <Typography sx={{ color: 'success.main', fontWeight: 500 }}>
+                                        Pass
+                                    </Typography>
+                                </>
+                            ) : (
+                                <>
+                                    <ClearIcon sx={{ color: 'error.main' }} />
+                                    <Typography sx={{ color: 'error.main', fontWeight: 500 }}>
+                                        Fail
+                                    </Typography>
+                                </>
+                            )}
                     </Box>
                 );
             },
@@ -306,12 +347,25 @@ function AnalyticPage() {
                 }
 
                 return (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                        {icon}
+                    row.total_lpmi == null || row.total_assesor == null ? (
                         <Typography>
-                            {label}
+                            -
                         </Typography>
-                    </Box>
+                    ) : (
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 1
+                            }}
+                        >
+                            {icon}
+                            <Typography>
+                                {label}
+                            </Typography>
+                        </Box>
+                    )
                 );
             },
         },
@@ -387,21 +441,22 @@ function AnalyticPage() {
 
                 return (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                        {isPass ? (
-                            <>
-                                <CheckIcon sx={{ color: 'success.main' }} />
-                                <Typography sx={{ color: 'success.main', fontWeight: 500 }}>
-                                    Pass
-                                </Typography>
-                            </>
-                        ) : (
-                            <>
-                                <ClearIcon sx={{ color: 'error.main' }} />
-                                <Typography sx={{ color: 'error.main', fontWeight: 500 }}>
-                                    Fail
-                                </Typography>
-                            </>
-                        )}
+                        {row.assesor === undefined || row.assesor === null ? '-'
+                            : isPass ? (
+                                <>
+                                    <CheckIcon sx={{ color: 'success.main' }} />
+                                    <Typography sx={{ color: 'success.main', fontWeight: 500 }}>
+                                        Pass
+                                    </Typography>
+                                </>
+                            ) : (
+                                <>
+                                    <ClearIcon sx={{ color: 'error.main' }} />
+                                    <Typography sx={{ color: 'error.main', fontWeight: 500 }}>
+                                        Fail
+                                    </Typography>
+                                </>
+                            )}
                     </Box>
                 );
             },
@@ -426,12 +481,25 @@ function AnalyticPage() {
                 }
 
                 return (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                        {icon}
+                    row.lpmi == null || row.assesor == null ? (
                         <Typography>
-                            {label}
+                            -
                         </Typography>
-                    </Box>
+                    ) : (
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 1
+                            }}
+                        >
+                            {icon}
+                            <Typography>
+                                {label}
+                            </Typography>
+                        </Box>
+                    )
                 );
             },
         },
@@ -498,7 +566,7 @@ function AnalyticPage() {
             minWidth: 120,
             align: 'center',
             render: (row) =>
-                row.skor_prodi === 0
+                row.skor_prodi === null
                     ? '-'
                     : `${row.skor_prodi.toFixed(2)}/${row.max_weight.toFixed(2)}`,
         },
@@ -508,7 +576,7 @@ function AnalyticPage() {
             minWidth: 120,
             align: 'center',
             render: (row) =>
-                row.skor_lpmi === 0
+                row.skor_lpmi === null
                     ? '-'
                     : `${row.skor_lpmi.toFixed(2)}/${row.max_weight.toFixed(2)}`,
         },
@@ -518,7 +586,7 @@ function AnalyticPage() {
             minWidth: 120,
             align: 'center',
             render: (row) =>
-                row.skor_assesor === 0
+                row.skor_assesor === null
                     ? '-'
                     : `${row.skor_assesor.toFixed(2)}/${row.max_weight.toFixed(2)}`,
         },
@@ -559,7 +627,7 @@ function AnalyticPage() {
         return !hidden.includes(col.id as string);
     });
 
-    if (!formData) {
+    if (loading) {
         return (
             <Box sx={{ p: 4 }}>
                 <Typography variant="body1" color="text.secondary">
@@ -570,26 +638,81 @@ function AnalyticPage() {
         );
     }
 
+    if (!weightSummary) {
+        return (
+            <Box sx={{ mx: "auto", p: 4 }}>
+                <Typography
+                    variant="h4"
+                    gutterBottom
+                    sx={{ mb: 3 }}
+                >
+                    Event Analytics
+                </Typography>
+                <Paper sx={{ p: 5, textAlign: 'center', bgcolor: '#fafafa' }}>
+                    <Typography variant="h6" gutterBottom color="text.secondary">
+                        No Data Yet
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        There is no analytics data available for this period at the moment.
+                        <br />
+                        Please check back later or ensure that the assessment process has been completed.
+                    </Typography>
+                </Paper>
+            </Box>
+        );
+    }
+
+    const hasNoData = !weightSummary.kriteria_detail ||
+        weightSummary.kriteria_detail.length === 0 ||
+        (weightSummary.max_points === 0 && weightSummary.total_questions === 0);
+
+    if (hasNoData) {
+        return (
+            <Box sx={{ mx: "auto", p: 4 }}>
+                <Typography
+                    variant="h4"
+                    gutterBottom
+                    sx={{ mb: 3 }}
+                >
+                    Event Analytics
+                </Typography>
+                <Paper sx={{ p: 5, textAlign: 'center', bgcolor: '#fafafa' }}>
+                    <Typography variant="h6" gutterBottom color="text.secondary">
+                        No Data Available
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        The assessment data has not been filled out yet.
+                        <br />
+                        Please wait for the assessment process to begin or contact the administrator.
+                    </Typography>
+                </Paper>
+            </Box>
+        );
+    }
+
     return (
         <Box sx={{ mx: "auto" }}>
-            <Typography
-                variant="h4"
-                gutterBottom
-                sx={{
-                    mb: 3,
-                }}
-            >
-                Event Analytics
-            </Typography>
+            <Grid container gap={2} direction="row" alignItems="center" mb={3}>
+                <Typography
+                    variant="h4"
+                >
+                    Event Analytics
+                </Typography>
+                <Chip
+                    label={status.label}
+                    color={status.color}
+                    size="medium"
+                />
+            </Grid>
             <Grid container justifyContent='space-between' sx={{ mb: 3, }}>
                 <Grid container gap={1} direction="row">
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>EDPS Submitted by: {weightSummary?.nama_pengisi}</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>LPMI Validator: {weightSummary?.nama_validator}</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>EDPS Submitted by: {weightSummary?.nama_pengisi || '-'}</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>LPMI Validator: {weightSummary?.nama_validator || '-'}</Typography>
                 </Grid>
                 <Grid container gap={1} direction="row">
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>EDPS Submission Date: {formatDate(weightSummary?.tanggal_pengisian || '')}</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>LPMI Validation Date: {formatDate(weightSummary?.tanggal_validasi || '')}</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>Assessor Review Date {formatDate(weightSummary?.tanggal_review || '')}</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>EDPS Last Saved Date: {formatDate(weightSummary?.tanggal_pengisian )}</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>LPMI Last Saved Date: {formatDate(weightSummary?.tanggal_validasi)}</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>Assessor Last Saved Date {formatDate(weightSummary?.tanggal_review)}</Typography>
                 </Grid>
             </Grid>
             <Box sx={{

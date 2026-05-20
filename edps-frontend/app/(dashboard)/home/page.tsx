@@ -220,7 +220,6 @@ function HomePage() {
                             size="small"
                             variant="contained"
                             onClick={() => handleAnalytic(row)}
-                            disabled={row.status != 'Reviewed'}
                         >
                             View Analytic
                         </Button>

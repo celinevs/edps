@@ -144,13 +144,18 @@ export const calculateBobotProgress = (
 
 // Turn date to this format: Tue, Mar 31, 2026
 export const formatDate = (dateString: string) => {
-    if (!dateString) return '';
+    if (!dateString) return '-';
 
     const date = new Date(dateString);
+
+    if (isNaN(date.getTime())) {
+        return '-';
+    }
+
     return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
     });
-  };
+};

@@ -3,16 +3,45 @@ from app.models.Jawaban import Jawaban
 from app.models.Akreditasi import Akreditasi
 from app.models.QuestionList import LamEmba, LamInfokom
 from app.models.Prodi import Prodi
-from sqlalchemy import and_
+from sqlalchemy import and_, cast, Integer
 from sqlalchemy.sql import union_all
 import pandas as pd
 import numpy as np
+import os
 import joblib
+from sklearn.metrics import r2_score
 
-def fetch_data_from_db(filtered=None):
+def fetch_data_from_db(filtered=None, id_prodi=None, year=None, current_year=None):
     """Fetch raw data from database using SQLAlchemy"""
 
     queries = []
+
+    # Common filters
+    common_filters = [
+        Jawaban.jawaban_prodi.isnot(None),
+        Jawaban.jawaban_lpmi.isnot(None),
+        Jawaban.jawaban_assesor.isnot(None),
+    ]
+
+    if current_year:
+        # Example input: "2026/2027"
+        target_year = int(str(current_year).split("/")[0])
+
+        # Extract first 4 digits from DB column
+        db_year = cast(
+        db.func.substring(Akreditasi.tahun_berlaku, 1, 4),
+        Integer
+        )
+
+        # Filter from past years until selected year
+        common_filters.append(db_year <= target_year)
+
+    # Add id_prodi filter if provided
+    if id_prodi:
+        common_filters.append(Akreditasi.id_prodi == id_prodi)
+    
+    if year:
+        common_filters.append(Akreditasi.tahun_berlaku == year)
 
     # LAM INFOKOM QUERY
     if filtered != 'emba':
@@ -39,9 +68,7 @@ def fetch_data_from_db(filtered=None):
                 )
             )
             .filter(
-                Jawaban.jawaban_prodi.isnot(None),
-                Jawaban.jawaban_lpmi.isnot(None),
-                Jawaban.jawaban_assesor.isnot(None),
+                *common_filters,
                 LamInfokom.bobot.isnot(None),
             )
         )
@@ -53,7 +80,7 @@ def fetch_data_from_db(filtered=None):
         lamemba_query = (
             db.session.query(
                 Akreditasi.tahun_berlaku.label("year"),
-                Prodi.nama_prodi.label("major"),
+                Prodi.kode_prodi.label("major"),
                 db.literal("lamemba").label("exam"),
                 LamEmba.q_no.label("q_no"),
                 LamEmba.bobot.label("bobot"),
@@ -73,9 +100,7 @@ def fetch_data_from_db(filtered=None):
                 )
             )
             .filter(
-                Jawaban.jawaban_prodi.isnot(None),
-                Jawaban.jawaban_lpmi.isnot(None),
-                Jawaban.jawaban_assesor.isnot(None),
+                *common_filters,
                 LamEmba.bobot.isnot(None),
             )
         )
@@ -196,7 +221,105 @@ def aggregate_per_exam(df):
     
     return feat
 
-def compute_and_combine_risk_metrics(df):
+def generate_indicator_table(raw_df):
+
+    if raw_df.empty:
+        return pd.DataFrame()
+
+    df = raw_df.copy()
+
+    df["melampaui"] = 0
+    df["memenuhi"] = 0
+    df["belum_memenuhi"] = 0
+
+    infokom_mask = df["exam"] == "laminfokom"
+
+    df.loc[
+        infokom_mask & (df["jawaban_assessor"] == 4),
+        "melampaui"
+    ] = 1
+
+    df.loc[
+        infokom_mask & (df["jawaban_assessor"] == 3),
+        "memenuhi"
+    ] = 1
+
+    df.loc[
+        infokom_mask & (df["jawaban_assessor"] < 3),
+        "belum_memenuhi"
+    ] = 1
+
+    emba_mask = df["exam"] == "lamemba"
+
+    df.loc[
+        emba_mask & (df["jawaban_assessor"] == 1),
+        "melampaui"
+    ] = 1
+
+    df.loc[
+        emba_mask & (df["jawaban_assessor"] == 0),
+        "memenuhi"
+    ] = 1
+
+    table_df = (
+        df
+        .groupby(["major", "exam"])
+        .agg({
+            "melampaui": "sum",
+            "memenuhi": "sum",
+            "belum_memenuhi": "sum"
+        })
+        .reset_index()
+    )
+
+    # Total indikator
+    table_df["jumlah"] = (
+        table_df["melampaui"] +
+        table_df["memenuhi"] +
+        table_df["belum_memenuhi"]
+    )
+
+    # Avoid division by zero
+    table_df["jumlah"] = table_df["jumlah"].replace(0, 1)
+
+    # Percentages
+    table_df["indikator_u"] = (
+        table_df["melampaui"] /
+        table_df["jumlah"] * 100
+    ).round(0).astype(int)
+
+    table_df["indikator_m"] = (
+        table_df["memenuhi"] /
+        table_df["jumlah"] * 100
+    ).round(0).astype(int)
+
+    table_df["indikator_bm"] = (
+        table_df["belum_memenuhi"] /
+        table_df["jumlah"] * 100
+    ).round(0).astype(int)
+
+    # Rename exam labels
+    table_df["LAM"] = table_df["exam"].replace({
+        "laminfokom": "Infokom",
+        "lamemba": "Emba"
+    })
+
+    # Final columns
+    table_df = table_df[[
+        "major",
+        "indikator_u",
+        "indikator_m",
+        "indikator_bm",
+        "melampaui",
+        "memenuhi",
+        "belum_memenuhi",
+        "jumlah",
+        "LAM"
+    ]]
+
+    return table_df
+
+def compute_and_combine_risk_metrics(df, year=None):
     """
     Compute risk metrics and combine risk scores for majors
     with multiple exams.
@@ -214,6 +337,9 @@ def compute_and_combine_risk_metrics(df):
     """
 
     df = df.copy()
+
+    if year is not None:
+        df = df[df["year"].astype(str) == str(year)]
 
     df["trend_penalty"] = (
         df["assessor_growth"]
@@ -326,34 +452,384 @@ def compute_priority_table(df):
     
     return prio_df
 
+# def predict_future_scores(
+#     df,
+#     year=None,
+#     major=None,
+#     model_dir="ml",
+#     ):
+ 
+#     base_dir   = os.path.dirname(os.path.abspath(__file__))
+#     model_path = os.path.join(base_dir, "..", model_dir)
+ 
+#     le_exam    = joblib.load(os.path.join(model_path, "le_exam.pkl"))
+#     le_major   = joblib.load(os.path.join(model_path, "le_major.pkl"))
+#     scaler     = joblib.load(os.path.join(model_path, "scaler_pred.pkl"))
+#     best_model = joblib.load(os.path.join(model_path, "Random_Forest.pkl"))
+ 
+#     year_bounds_path = os.path.join(model_path, "year_bounds.pkl")
+#     if os.path.exists(year_bounds_path):
+#         train_min_year, train_max_year = joblib.load(year_bounds_path)
+#     else:
+#         import warnings
+#         warnings.warn(
+#             "year_bounds.pkl not found. Inferring year range from df — "
+#             "year_norm may not match training distribution.",
+#             UserWarning,
+#         )
+#         train_min_year = None
+#         train_max_year = None
+ 
+#     PRED_FEATURES = [
+#         "score_prodi_w",
+#         "score_lpmi_w",
+#         "gap_lpmi_assessor",
+#         "agree_lpmi_assessor",
+#         "assessor_prev",
+#         "assessor_growth",
+#         "assessor_ma3",
+#         "lpmi_override_rate",
+#         "assessor_override_rate",
+#         "year_norm",
+#         "exam_enc",
+#         "major_enc",
+#     ]
+ 
+#     features = aggregate_per_exam(df)         
+ 
+#     if features.empty:
+#         return pd.DataFrame()
+
+#     features["exam"]  = features["exam"].astype(str)
+#     features["major"] = features["major"].astype(str)
+ 
+#     if major:
+#         features = features[
+#             features["major"].str.lower() == major.lower()
+#         ]
+ 
+#     if features.empty:
+#         return pd.DataFrame()
+ 
+#     features["year_numeric"] = (
+#         features["year"]
+#         .astype(str)
+#         .str.extract(r"(\d{4})")[0]
+#         .astype(int)
+#     )
+ 
+#     features = features.sort_values(["major", "exam", "year_numeric"])
+#     if year:
+#         features["future_year"] = int(year)
+#     else:
+#         features["future_year"] = features["year_numeric"] + 1
+
+#     if train_min_year is None:
+#         train_min_year = features["year_numeric"].min()
+#         train_max_year = max(
+#             features["year_numeric"].max(),
+#             features["future_year"].max(),
+#         )
+ 
+#     features["year_norm"] = (
+#         (features["future_year"] - train_min_year)
+#         / (train_max_year - train_min_year + 1e-9)
+#     )
+
+#     def safe_label_encode(le, series):
+#         """
+#         Encode a series using a fitted LabelEncoder.
+#         Unseen labels are mapped to len(le.classes_) (one-past-end),
+#         which is a consistent sentinel the model can treat as OOV.
+#         We do NOT mutate le.classes_.
+#         """
+#         known = set(le.classes_)
+#         mapped = series.map(
+#             lambda v: le.transform([v])[0] if v in known else len(le.classes_)
+#         )
+#         unseen = series[~series.isin(known)].unique()
+#         if len(unseen):
+#             import warnings
+#             warnings.warn(
+#                 f"LabelEncoder for '{series.name}' encountered unseen labels: "
+#                 f"{unseen.tolist()}. Mapped to sentinel {len(le.classes_)}.",
+#                 UserWarning,
+#             )
+#         return mapped
+ 
+#     features["exam_enc"]  = safe_label_encode(le_exam,  features["exam"])
+#     features["major_enc"] = safe_label_encode(le_major, features["major"])
+ 
+#     lag_features = [
+#         "assessor_prev",
+#         "assessor_growth",
+#         "assessor_ma3",
+#     ]
+ 
+#     missing_lag_mask = features[lag_features].isna().any(axis=1)
+#     if missing_lag_mask.any():
+#         import warnings
+#         warnings.warn(
+#             f"{missing_lag_mask.sum()} row(s) are missing lag features "
+#             f"({lag_features}). These rows will use column medians as "
+#             "imputed values, which may reduce prediction accuracy.",
+#             UserWarning,
+#         )
+
+#         for col in lag_features:
+#             median_val = features[col].median()
+#             features[col] = features[col].fillna(
+#                 median_val if not np.isnan(median_val) else 0.0
+#             )
+
+#     X_pred = features[PRED_FEATURES].fillna(0)
+
+#     X_scaled = scaler.transform(X_pred)
+ 
+#     features["predicted_score"] = best_model.predict(X_scaled).clip(0, 1)
+ 
+#     base_cols = ["future_year", "major", "exam", "predicted_score"]
+#     optional_cols = ["total_bobot"]
+#     return_cols = base_cols + [
+#         c for c in optional_cols if c in features.columns
+#     ]
+ 
+#     return features[return_cols].reset_index(drop=True)
+
 def predict_future_scores(
-    df,
-    year=None,
-    major=None,
-    model_dir="ml"
-):
-    """Predict future assessor score"""
+    feat: pd.DataFrame,
+    models_dir: str = "ml",
+    model_name: str | None = 'Random_Forest',   # None → auto-pick best saved model
+) -> pd.DataFrame:
+    """
+    End-to-end prediction pipeline in one function.
 
-    import os
+    Steps (explained in detail below):
+        1. Load raw data from DB
+        2. Prepare & normalise features
+        3. Aggregate to per-exam level
+        4. Engineer the same extra columns used during training
+        5. Load the scaler + chosen model from disk
+        6. Run prediction for the *next* year
+        7. Return a tidy DataFrame
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(base_dir, "..", model_dir)
+    Parameters
+    ----------
+    models_dir  : folder that contains the .pkl files saved during training
+    model_name  : exact model file stem, e.g. "Random_Forest"
+                  If None, the function tries every saved model and picks
+                  the first one it can load successfully.
+    filtered    : pass "emba" or "infokom" to restrict exam type (same as
+                  the training helper)
+    id_prodi    : optional prodi filter forwarded to fetch_data_from_db
+    year        : optional year filter forwarded to fetch_data_from_db
 
-    # Load assets
-    le_exam = joblib.load(
-        os.path.join(model_path, "le_exam.pkl")
+    Returns
+    -------
+    DataFrame with columns:
+        future_year, major, exam, predicted_score[, total_bobot]
+    """
+
+    # ── STEP 4: Recreate the extra encoded columns used during training ───────
+    # The training notebook added year_norm, exam_enc, major_enc.
+    # We must reproduce exactly the same transformations here so the feature
+    # matrix matches what the model was trained on.
+
+    feat["year"] = (
+        feat["year"]
+        .astype(str)
+        .str.extract(r"(\d{4})")[0]
+        .astype(int)
+    )
+    latest_year = feat["year"].max()
+    feat["year_norm"] = (latest_year - feat["year"].min()) / (feat["year"].max() - feat["year"].min() + 1e-9)
+
+
+    # Simple label encoding — must match training order.
+    # If you saved LabelEncoders during training, load those instead.
+    exam_cats  = sorted(feat["exam"].unique())
+    major_cats = sorted(feat["major"].unique())
+    feat["exam_enc"]  = feat["exam"].map({v: i for i, v in enumerate(exam_cats)})
+    feat["major_enc"] = feat["major"].map({v: i for i, v in enumerate(major_cats)})
+
+    # ── STEP 5: Build the feature matrix ─────────────────────────────────────
+    # Same column order as PRED_FEATURES in the training notebook.
+    PRED_FEATURES = [
+        "score_prodi_w", "score_lpmi_w",
+        "gap_lpmi_assessor", "agree_lpmi_assessor",
+        "assessor_prev", "assessor_growth", "assessor_ma3",
+        "lpmi_override_rate", "assessor_override_rate",
+        "year_norm", "exam_enc", "major_enc",
+    ]
+
+    # ── DIAGNOSTIC: show which columns have NaN and why ──────────────────────
+    # assessor_prev / assessor_growth are NaN for a group's FIRST year because
+    # aggregate_per_exam uses .shift(1).  If every group has only one year of
+    # data, ALL rows will be NaN here and the dropna below will empty the frame.
+    nan_counts = feat[PRED_FEATURES].isna().sum()
+    if nan_counts.any():
+        print("\n[DEBUG] NaN counts per feature BEFORE imputation:")
+        print(nan_counts[nan_counts > 0].to_string())
+        print(f"  Total rows before imputation : {len(feat)}")
+
+    # ── FIX: impute lag/growth columns for groups that have only one year ─────
+    #
+    # assessor_prev  → use the current score as the "previous" (best guess
+    #                  when no real history exists)
+    # assessor_growth → 0  (no change observed yet)
+    # assessor_ma3   → already has min_periods=1 so should never be NaN;
+    #                  fill anyway as a safety net
+    #
+    # This mirrors what the model saw during training for its earliest rows
+    # (the training set also had some first-year NaNs that were dropped, but
+    # for PREDICTION we want to keep every current row and make a best effort).
+    if feat["assessor_prev"].isna().any():
+        feat["assessor_prev"]   = feat["assessor_prev"].fillna(feat["score_assessor_w"])
+    if feat["assessor_growth"].isna().any():
+        feat["assessor_growth"] = feat["assessor_growth"].fillna(0.0)
+    if feat["assessor_ma3"].isna().any():
+        feat["assessor_ma3"]    = feat["assessor_ma3"].fillna(feat["score_assessor_w"])
+    if feat["prodi_prev"].isna().any():
+        feat["prodi_prev"]      = feat["prodi_prev"].fillna(feat["score_prodi_w"])
+    if feat["prodi_growth"].isna().any():
+        feat["prodi_growth"]    = feat["prodi_growth"].fillna(0.0)
+
+    # After imputation, drop any rows still missing (would be non-lag columns)
+    features = feat.dropna(subset=PRED_FEATURES).copy()
+
+    if features.empty:
+        # Detailed diagnosis so the caller knows exactly what's missing
+        still_nan = feat[PRED_FEATURES].isna().sum()
+        still_nan = still_nan[still_nan > 0]
+        raise ValueError(
+            "After NaN imputation no rows remain. "
+            "The following features are still fully NaN:\n"
+            f"{still_nan.to_string()}\n\n"
+            "Likely causes:\n"
+            "  • score_prodi_w / score_lpmi_w / gap_lpmi_assessor are NaN\n"
+            "    → the aggregate step produced no valid scores (check bobot or jawaban data)\n"
+            "  • exam_enc / major_enc are NaN\n"
+            "    → a major or exam value present at predict-time was unseen during encoding\n"
+        )
+
+    print(f"\n[DEBUG] Rows available for prediction after imputation: {len(features)}")
+    print(features[["year", "major", "exam"]].to_string(index=False))
+
+    X = features[PRED_FEATURES].values
+
+    # ── STEP 6: Load scaler + model, run prediction ───────────────────────────
+    base_dir   = os.path.dirname(os.path.abspath(__file__))
+    models_path = os.path.join(base_dir, "..", models_dir)
+    scaler_path = os.path.join(models_path, "scaler_pred.pkl")
+    if not os.path.exists(scaler_path):
+        raise FileNotFoundError(f"Scaler not found at {scaler_path}")
+    scaler = joblib.load(scaler_path)
+
+    # Resolve model file
+    if model_name:
+        model_path = os.path.join(models_path, f"{model_name}.pkl")
+    # else:
+    #     # Auto-pick: walk the directory and try each .pkl that isn't the scaler
+    #     model_path = _find_best_model(models_dir)
+
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model file not found: {model_path}")
+
+    model = joblib.load(model_path)
+    loaded_model_name = os.path.splitext(os.path.basename(model_path))[0]
+    print(f"  -> Using model : {loaded_model_name}")
+    print(f"  -> Predicting  : {len(features)} major-exam rows")
+
+    # Some models (e.g. Ridge) were trained on scaled data; others were not.
+    # The safest approach: always scale. If the original model was trained
+    # without scaling, replace the line below with just `X`.
+    # (Better: save a flag alongside each model during training.)
+    # X_scaled = scaler.transform(X)
+
+    predicted = model.predict(X)
+
+    # importances = pd.Series(
+    # model.feature_importances_,  # won't work for Ridge, only tree models
+    # index=PRED_FEATURES
+    # ).sort_values(ascending=False)
+
+    # ── STEP 7: Build the output DataFrame ───────────────────────────────────
+    # "future_year" = the year we are predicting FOR (current year + 1).
+    features = features.copy()
+    features["predicted_score"] = predicted
+    features["future_year"]     = latest_year + 1
+
+    base_cols     = ["future_year", "major", "exam", "predicted_score"]
+    optional_cols = ["total_bobot"]
+    return_cols   = base_cols + [c for c in optional_cols if c in features.columns]
+
+    return features[return_cols].reset_index(drop=True), X
+
+def get_actual_vs_predicted(
+    models_dir: str = "ml",
+    model_name: str = "Random_Forest",
+    filtered: str | None = None,
+    id_prodi: str | None = None,
+    year: int | None = None,
+) -> pd.DataFrame:
+    """
+    Load EXISTING trained model and return:
+
+        actual vs predicted for ALL data
+
+    WITHOUT retraining.
+    """
+
+    # ─────────────────────────────────────────────
+    # STEP 1 — LOAD DATA
+    # ─────────────────────────────────────────────
+    raw_df = fetch_data_from_db(
+        filtered=filtered,
+        id_prodi=id_prodi,
+        year=year,
     )
 
-    le_major = joblib.load(
-        os.path.join(model_path, "le_major.pkl")
+    if raw_df.empty:
+        raise ValueError("No data found.")
+
+    feat_q = prepare_features(raw_df)
+    feat = aggregate_per_exam(feat_q)
+
+    # ─────────────────────────────────────────────
+    # STEP 2 — FEATURE ENGINEERING
+    # MUST MATCH TRAINING
+    # ─────────────────────────────────────────────
+    feat["year"] = (
+        feat["year"]
+        .astype(str)
+        .str.extract(r"(\d{4})")[0]
+        .astype(int)
     )
 
-    scaler = joblib.load(
-        os.path.join(model_path, "scaler_pred.pkl")
+    feat["year_norm"] = (
+        feat["year"] - feat["year"].min()
+    ) / (
+        feat["year"].max() - feat["year"].min() + 1e-9
     )
 
-    best_model = joblib.load(
-        os.path.join(model_path, "Random_Forest.pkl")
+    exam_cats = sorted(feat["exam"].unique())
+    major_cats = sorted(feat["major"].unique())
+
+    feat["exam_enc"] = feat["exam"].map(
+        {v: i for i, v in enumerate(exam_cats)}
+    )
+
+    feat["major_enc"] = feat["major"].map(
+        {v: i for i, v in enumerate(major_cats)}
+    )
+
+    # ─────────────────────────────────────────────
+    # TARGET
+    # Predict next year assessor score
+    # ─────────────────────────────────────────────
+    feat["target"] = (
+        feat.groupby(["major", "exam"])["score_assessor_w"]
+        .shift(-1)
     )
 
     PRED_FEATURES = [
@@ -368,119 +844,108 @@ def predict_future_scores(
         "assessor_override_rate",
         "year_norm",
         "exam_enc",
-        "major_enc"
+        "major_enc",
     ]
 
-    # Aggregate
-    features = aggregate_per_exam(df)
-
-    if features.empty:
-        return pd.DataFrame()
-
-    # Ensure string
-    features["exam"] = features["exam"].astype(str)
-    features["major"] = features["major"].astype(str)
-
-    if major:
-        features = features[
-            features["major"].str.lower() == major.lower()
-        ]
-
-    if features.empty:
-        return pd.DataFrame()
-
-    # Extract numeric year
-    features["year_numeric"] = (
-        features["year"]
-        .astype(str)
-        .str.extract(r"(\d{4})")[0]
-        .astype(int)
+    # ─────────────────────────────────────────────
+    # HANDLE NaNs
+    # ─────────────────────────────────────────────
+    feat["assessor_prev"] = feat["assessor_prev"].fillna(
+        feat["score_assessor_w"]
     )
 
-    # Latest row
-    latest_features = (
-        features
-        .sort_values("year_numeric")
-        .groupby(["major", "exam"])
-        .tail(1)
-        .copy()
+    feat["assessor_growth"] = feat["assessor_growth"].fillna(0)
+
+    feat["assessor_ma3"] = feat["assessor_ma3"].fillna(
+        feat["score_assessor_w"]
     )
 
-    # Future year
-    if year:
-        latest_features["future_year"] = year
-    else:
-        latest_features["future_year"] = (
-            latest_features["year_numeric"] + 1
+    model_df = feat.dropna(
+        subset=PRED_FEATURES + ["target"]
+    ).reset_index(drop=True)
+
+    if model_df.empty:
+        raise ValueError("No usable rows after preprocessing.")
+
+    # ─────────────────────────────────────────────
+    # USE ALL DATA (NO SPLIT FOR PREDICTION)
+    # ─────────────────────────────────────────────
+    X_all = model_df[PRED_FEATURES].values
+    y_all = model_df["target"].values
+    meta_all = model_df.reset_index(drop=True)
+
+    # ─────────────────────────────────────────────
+    # LOAD EXISTING MODEL
+    # ─────────────────────────────────────────────
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    models_path = os.path.join(
+        base_dir,
+        "..",
+        models_dir
+    )
+
+    scaler = joblib.load(
+        os.path.join(models_path, "scaler_pred.pkl")
+    )
+
+    model_path = os.path.join(
+        models_path,
+        f"{model_name}.pkl"
+    )
+
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(
+            f"Model not found: {model_path}"
         )
 
-    # Normalize future year
-    min_year = features["year_numeric"].min()
+    model = joblib.load(model_path)
 
-    max_year = max(
-        features["year_numeric"].max(),
-        latest_features["future_year"].max()
-    )
-
-    latest_features["year_norm"] = (
-        (latest_features["future_year"] - min_year) /
-        (max_year - min_year + 1e-9)
-    )
-
-    # Handle unseen labels
-    unseen_exams = (
-        set(latest_features["exam"]) -
-        set(le_exam.classes_)
-    )
-
-    if unseen_exams:
-        le_exam.classes_ = np.concatenate([
-            le_exam.classes_,
-            list(unseen_exams)
-        ])
-
-    unseen_majors = (
-        set(latest_features["major"]) -
-        set(le_major.classes_)
-    )
-
-    if unseen_majors:
-        le_major.classes_ = np.concatenate([
-            le_major.classes_,
-            list(unseen_majors)
-        ])
-
-    # Encode
-    latest_features["exam_enc"] = le_exam.transform(
-        latest_features["exam"]
-    )
-
-    latest_features["major_enc"] = le_major.transform(
-        latest_features["major"]
-    )
-
-    # Prepare input
-    X_pred = latest_features[PRED_FEATURES].fillna(0)
-
-    # Scale
-    X_scaled = scaler.transform(X_pred)
-
-    # Predict
-    latest_features["predicted_score"] = (
-        best_model.predict(X_scaled)
-    )
-
-    latest_features["predicted_score"] = (
-        latest_features["predicted_score"]
-        .clip(0, 1)
-    )
-
-    return latest_features[
-        [
-            "future_year",
-            "major",
-            "exam",
-            "predicted_score",
-            "total_bobot"
-        ]
+    # ─────────────────────────────────────────────
+    # SCALE ONLY CERTAIN MODELS
+    # ─────────────────────────────────────────────
+    scale_models = [
+        "Linear_Regression",
+        "Ridge_Regression",
     ]
+
+    if model_name in scale_models:
+        X_all_final = scaler.transform(X_all)
+    else:
+        X_all_final = X_all
+
+    # ─────────────────────────────────────────────
+    # PREDICT FOR ALL DATA
+    # ─────────────────────────────────────────────
+    preds_all = model.predict(X_all_final)
+
+    # Calculate R² on all data (with warning that this is not train/test split)
+    r2 = r2_score(y_all, preds_all)
+
+    # ─────────────────────────────────────────────
+    # RETURN FRONTEND-READY DF WITH ALL DATA
+    # ─────────────────────────────────────────────
+    result_df = pd.DataFrame({
+        "index": np.arange(len(y_all)),
+        "year": meta_all["year"].values,
+        "major": meta_all["major"].values,
+        "exam": meta_all["exam"].values,
+        "actual": y_all,
+        "predicted": preds_all,
+    })
+
+    result_df["residual"] = (
+        result_df["actual"] -
+        result_df["predicted"]
+    )
+
+    result_df["abs_error"] = (
+        result_df["residual"].abs()
+    )
+
+    # Add metadata - FIXED: removed .tolist() since sorted() already returns a list
+    result_df.attrs["r2"] = float(r2)
+    result_df.attrs["years_available"] = sorted(result_df["year"].unique())  # ← FIXED HERE
+    result_df.attrs["n_samples"] = len(result_df)
+
+    return result_df

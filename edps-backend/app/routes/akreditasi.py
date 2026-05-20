@@ -11,49 +11,19 @@ from datetime import datetime
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from sqlalchemy import func, case, cast, Date, Integer
 from datetime import datetime, date
-from app.service.analytic_service import fetch_data_from_db,prepare_features ,aggregate_per_exam, compute_and_combine_risk_metrics, compute_priority_table, predict_future_scores
+from app.service.analytic_service import fetch_data_from_db,prepare_features ,aggregate_per_exam, compute_and_combine_risk_metrics, compute_priority_table, predict_future_scores, generate_indicator_table, get_actual_vs_predicted
 
 akreditasi_bp = Blueprint("akreditasi", __name__)
 
 @akreditasi_bp.route("/ml-dashboard", methods=["GET"])
 def ml_dashboard():
+    # id_prodi = request.args.get("id_prodi")
 
-    year_overview = request.args.get("year_overview")
-    year_dashboard = request.args.get("year_dashboard")
-    major = request.args.get("major")
-    exam = request.args.get("exam")
-
-    raw_df = fetch_data_from_db()
-
-    if raw_df.empty:
-        return success_response(message="No data available")
-
-    prepared_df =prepare_features(raw_df)
-
-    if year_dashboard:
-       prepared_df =prepared_df[prepared_df["year"] == year_dashboard]
-
-    if major:
-       prepared_df =prepared_df[prepared_df["major"] == major]
-
-    if exam:
-       prepared_df =prepared_df[prepared_df["exam"] == exam]
-
-    features = aggregate_per_exam(prepared_df)
-
-    risk_exam, risk_major = compute_and_combine_risk_metrics(features)
-
-    priority_df = compute_priority_table(prepared_df)
-
-    # # Prediction
-    prediction_df = predict_future_scores(prepared_df)
+    graph = get_actual_vs_predicted(filtered='infokom', id_prodi='PR001')
 
     return success_response( 
         data={
-        "risk_per_exam": risk_exam.to_dict(orient="records"),
-        "risk_per_major": risk_major.to_dict(orient="records"),
-        "priority_table": priority_df.to_dict(orient="records"),
-        "predictions": prediction_df.to_dict(orient="records"),
+        "graph": graph.to_dict(orient="records"),
         },
         message="Dashboard fetched!"
     )
@@ -81,7 +51,6 @@ def get_akreditasi():
         available = request.args.get('available')
         id_lembaga = request.args.get('id_lembaga', type=int)
         only_null_assesor = request.args.get('only_null_assesor')
-        is_assesor_page = request.args.get('is_assesor_page')
         is_home_page = request.args.get('is_home_page')
 
         query = Akreditasi.query
@@ -124,9 +93,6 @@ def get_akreditasi():
                         if is_home_page:
                             query = query.filter( Akreditasi.status.in_(['Submitted', 'Validating']),
                             cast(Akreditasi.tanggal_mulai, Date) <= today)
-                    else:
-                        query = query.filter( Akreditasi.status.in_(['Submitted', 'Validating', 'Validated', 'Reviewing', 'Reviewed']),
-                        cast(Akreditasi.tanggal_mulai, Date) <= today)
             else:
                     query = query.filter(
                         cast(Akreditasi.tanggal_mulai, Date) <= today)
@@ -136,10 +102,6 @@ def get_akreditasi():
             if only_null_assesor:
                 query = query.filter(Akreditasi.status.in_(['In Progress','Submitted', 'Validating']))
         
-        if is_assesor_page is not None:
-            is_assesor_page = is_assesor_page.lower() == "true"
-            if is_assesor_page:
-                query = query.filter(Akreditasi.status.in_(['Validated', 'Reviewing', 'Reviewed']))
 
         summary = query.with_entities(
             func.sum(case((Akreditasi.status == 'In Progress', 1), else_=0)).label('in_progress'),
@@ -271,7 +233,6 @@ def get_akreditasi_dropdown():
                  QuestionSet.id_lembaga == id_lembaga
                  )
             
-        query = query.filter(Akreditasi.status != "In Progress")
         akreditasi_list = query.all()
         
         results = []
@@ -340,22 +301,31 @@ def get_weight_summary_infokom(id):
     total_questions = 0
     total_max_point = 0
 
+    total_lpmi_answered = 0
+    total_assesor_answered = 0
+
     for row in detail_data:
         total_questions += 1
         bobot = row.bobot
         kriteria = row.kode_kriteria
-        skor_prodi = row.skor_prodi or 0
-        skor_lpmi = row.skor_lpmi or 0
-        skor_assesor = row.skor_assesor or 0
+        skor_prodi = row.skor_prodi if row.skor_prodi is not None else 0
+        skor_lpmi = row.skor_lpmi if row.skor_lpmi is not None else 0
+        skor_assesor = row.skor_assesor if row.skor_assesor is not None else 0
+        
+        if row.skor_lpmi is not None:
+            total_lpmi_answered += 1
+        if row.skor_assesor is not None:
+            total_assesor_answered += 1
 
         detail_q = {
         "q_no": row.q_no,
         "kode_kriteria": kriteria,
         "max_weight": bobot,
         "skor_prodi": skor_prodi,
-        "skor_lpmi": skor_lpmi,
-
-        "skor_assesor": skor_assesor,}
+        "skor_lpmi": row.skor_lpmi,  # Keep original None for JSON response
+        "skor_assesor": row.skor_assesor,  # Keep original None for JSON response
+        "lpmi_answered": 1 if row.skor_lpmi is not None else 0,
+        "assesor_answered": 1 if row.skor_assesor is not None else 0}
 
         # GROUP BY BOBOT (TABLE)
         if bobot not in bobot_map:
@@ -366,6 +336,8 @@ def get_weight_summary_infokom(id):
             "prodi": 0,
             "lpmi": 0,
             "assesor": 0,
+            "lpmi_answered": 0,
+            "assesor_answered": 0,
             "detail_question": []}
         
         bobot_map[bobot]["questions"] += 1
@@ -373,6 +345,10 @@ def get_weight_summary_infokom(id):
         bobot_map[bobot]["prodi"] += skor_prodi
         bobot_map[bobot]["lpmi"] += skor_lpmi
         bobot_map[bobot]["assesor"] += skor_assesor
+        if row.skor_lpmi is not None:
+            bobot_map[bobot]["lpmi_answered"] += 1
+        if row.skor_assesor is not None:
+            bobot_map[bobot]["assesor_answered"] += 1
         bobot_map[bobot]["detail_question"].append(detail_q)
 
         total_max_point += bobot
@@ -386,6 +362,8 @@ def get_weight_summary_infokom(id):
             "total_lpmi": 0,
             "total_assesor": 0,
             "max_weight": 0,
+            "lpmi_answered": 0,
+            "assesor_answered": 0,
             "detail": []}
 
         kriteria_map[kriteria]["total_pertanyaan"] += 1
@@ -393,6 +371,10 @@ def get_weight_summary_infokom(id):
         kriteria_map[kriteria]["total_lpmi"] += skor_lpmi
         kriteria_map[kriteria]["total_assesor"] += skor_assesor
         kriteria_map[kriteria]["max_weight"] += bobot
+        if row.skor_lpmi is not None:
+            kriteria_map[kriteria]["lpmi_answered"] += 1
+        if row.skor_assesor is not None:
+            kriteria_map[kriteria]["assesor_answered"] += 1
         
         elemen = row.elemen_penilaian_lam
         detail_list = kriteria_map[kriteria]["detail"]
@@ -404,6 +386,10 @@ def get_weight_summary_infokom(id):
                 item["lpmi"] += skor_lpmi
                 item["assesor"] += skor_assesor
                 item["weight"] += bobot
+                if row.skor_lpmi is not None:
+                    item["lpmi_answered"] = item.get("lpmi_answered", 0) + 1
+                if row.skor_assesor is not None:
+                    item["assesor_answered"] = item.get("assesor_answered", 0) + 1
                 found = True
                 break
         
@@ -414,22 +400,45 @@ def get_weight_summary_infokom(id):
                 "prodi": skor_prodi,
                 "lpmi": skor_lpmi,
                 "assesor": skor_assesor,
-                "weight": bobot
+                "weight": bobot,
+                "lpmi_answered": 1 if row.skor_lpmi is not None else 0,
+                "assesor_answered": 1 if row.skor_assesor is not None else 0
                 })
 
     for bobot, val in bobot_map.items():
         val["assesor_lpmi"] = val["assesor"] - val["lpmi"]
+        
+        if val["lpmi_answered"] == 0:
+            val["lpmi"] = None
+        if val["assesor_answered"] == 0:
+            val["assesor"] = None
+            
         table.append(val)
         
     table.sort(key=lambda x: x["weight"], reverse=True)
 
     kriteria_table = list(kriteria_map.values())
 
+    for item in kriteria_table:
+        if item["lpmi_answered"] == 0:
+            item["total_lpmi"] = None
+        if item["assesor_answered"] == 0:
+            item["total_assesor"] = None
+            
+        for detail_item in item["detail"]:
+            if detail_item.get("lpmi_answered", 0) == 0:
+                detail_item["lpmi"] = None
+            if detail_item.get("assesor_answered", 0) == 0:
+                detail_item["assesor"] = None
+
     return success_response(
         data={
             "detail": table,
             "kriteria_detail": kriteria_table,
-            "total_questions": total_questions,
+            "answered_questions": total_questions,
+            "lpmi_answered": total_lpmi_answered,
+            "assesor_answered": total_assesor_answered,
+            "total_questions": akreditasi.question_set.total_questions,
             "nama_pengisi": akreditasi.pengisi.username if akreditasi.pengisi else None,
             "nama_validator": akreditasi.validator.username if akreditasi.validator else None,
             "total_prodi": akreditasi.total_skor_prodi,
@@ -438,6 +447,7 @@ def get_weight_summary_infokom(id):
             "tanggal_pengisian": akreditasi.tanggal_pengisian,
             "tanggal_validasi": akreditasi.tanggal_validasi,
             "tanggal_review": akreditasi.tanggal_review,
+            "total_points": akreditasi.question_set.total_max_bobot,
             'max_points': total_max_point
         },
         message="Weight summary berhasil diambil"
@@ -478,9 +488,9 @@ def get_weight_summary_emba(id):
         total_questions += 1
         kriteria = row.kode_kriteria
         mandatory = row.mandatory
-        skor_prodi = row.skor_prodi or 0
-        skor_lpmi = row.skor_lpmi or 0
-        skor_assesor = row.skor_assesor or 0
+        skor_prodi = row.skor_prodi
+        skor_lpmi = row.skor_lpmi
+        skor_assesor = row.skor_assesor
         bobot = row.bobot 
         total_max_point += bobot
         
@@ -494,13 +504,23 @@ def get_weight_summary_emba(id):
             "total_assesor": 0,
             "max_weight": 0,
             "mandatory_pass": True,
+            "lpmi_count": 0,
+            "assesor_count": 0,
             "detail": []}
 
         kriteria_map[kriteria]["total_pertanyaan"] += 1
-        kriteria_map[kriteria]["total_prodi"] += skor_prodi
-        kriteria_map[kriteria]["total_lpmi"] += skor_lpmi
-        kriteria_map[kriteria]["total_assesor"] += skor_assesor
         kriteria_map[kriteria]["max_weight"] += bobot
+
+        if skor_lpmi is not None:
+            kriteria_map[kriteria]["total_lpmi"] += skor_lpmi
+            kriteria_map[kriteria]["lpmi_count"] += 1
+        
+        if skor_assesor is not None:
+            kriteria_map[kriteria]["total_assesor"] += skor_assesor
+            kriteria_map[kriteria]["assesor_count"] += 1
+        
+        if skor_prodi is not None:
+            kriteria_map[kriteria]["total_prodi"] += skor_prodi
         
         kriteria_map[kriteria]["detail"].append({
         "q_no": row.q_no,
@@ -517,11 +537,23 @@ def get_weight_summary_emba(id):
 
     kriteria_table = list(kriteria_map.values())
 
+    for item in kriteria_table:
+        if item["lpmi_count"] == 0:
+            item["total_lpmi"] = None
+
+        if item["assesor_count"] == 0:
+            item["total_assesor"] = None
+        
+    total_lpmi_answered = sum(1 for row in detail_data if row.skor_lpmi is not None)
+    total_assesor_answered = sum(1 for row in detail_data if row.skor_assesor is not None)
+
     return success_response(
         data={
             "detail": table,
             "kriteria_detail": kriteria_table,
-            "total_questions": total_questions,
+            "answered_questions": total_questions,
+            "lpmi_answered": total_lpmi_answered,
+            "assesor_answered": total_assesor_answered,
             "nama_pengisi": akreditasi.pengisi.username if akreditasi.pengisi else None,
             "nama_validator": akreditasi.validator.username if akreditasi.validator else None,
             "total_prodi": akreditasi.total_skor_prodi,
@@ -530,13 +562,14 @@ def get_weight_summary_emba(id):
             "tanggal_pengisian": akreditasi.tanggal_pengisian,
             "tanggal_validasi": akreditasi.tanggal_validasi,
             "tanggal_review": akreditasi.tanggal_review,
+            "total_questions": akreditasi.question_set.total_questions,
+            "total_points": akreditasi.question_set.total_max_bobot,
             'max_points': total_max_point
         },
         message="Weight summary berhasil diambil"
     )
 
-#Perlu get id akreditasi
-    
+
 @akreditasi_bp.route("/akreditasi/dashboard/detail/infokom", methods=["GET"])
 @jwt_required()
 def get_dashboard_detail_infokom():
@@ -556,7 +589,7 @@ def get_dashboard_detail_infokom():
                 )
                 .filter(
                     Akreditasi.id_qs == id_qs,
-                    Akreditasi.status == 'Reviewed'
+                    Akreditasi.id_prodi == akreditasi_obj.id_prodi
                     )
                     .order_by(
                         cast(func.substr(Akreditasi.tahun_berlaku, 6, 4), Integer).asc()
@@ -609,12 +642,16 @@ def get_dashboard_detail_infokom():
         )
 
         bobot_map = {}
+        has_lpmi_or_assesor_data = False
 
         for row in detail_data:
             bobot = row.bobot
             skor_prodi = row.skor_prodi or 0
             skor_lpmi = row.skor_lpmi or 0
             skor_assesor = row.skor_assesor or 0
+            
+            if skor_lpmi > 0 or skor_assesor > 0:
+                has_lpmi_or_assesor_data = True
 
             if bobot not in bobot_map:
                 bobot_map[bobot] = {
@@ -646,10 +683,26 @@ def get_dashboard_detail_infokom():
             last_map[bobot]["assesor"] += assesor
 
         table = []
+        total_gap_prodi_lpmi = 0
+        total_gap_lpmi_assesor = 0
+        total_max_possible_gap = 0
+
         for val in bobot_map.values():
             total_q = val["total_questions"]
             bobot = val["weight"]
             last = last_map.get(bobot, {})
+
+            avg_prodi = val["prodi"] / total_q if total_q else 0
+            avg_lpmi = val["lpmi"] / total_q if total_q else 0
+            avg_assesor = val["assesor"] / total_q if total_q else 0
+
+            gap_prodi_lpmi = abs(avg_prodi - avg_lpmi)
+            gap_lpmi_assesor = abs(avg_lpmi - avg_assesor)
+
+            total_gap_prodi_lpmi += gap_prodi_lpmi
+            total_gap_lpmi_assesor += gap_lpmi_assesor
+            max_gap_per_question = bobot * 0.75
+            total_max_possible_gap += total_q * max_gap_per_question
 
             last_avg_lpmi = (
                 last.get("lpmi", 0) / last.get("total", 1)
@@ -661,38 +714,49 @@ def get_dashboard_detail_infokom():
                 if last else None
                 )
 
-            avg_prodi = val["prodi"] / total_q if total_q else 0
-            avg_lpmi = val["lpmi"] / total_q if total_q else 0
-            avg_assesor = val["assesor"] / total_q if total_q else 0
-
             table.append({
                 "weight": bobot,
                 "total_questions": total_q,
 
-                "prodi": avg_prodi,
-                "lpmi": avg_lpmi,
-                "assesor": avg_assesor,
+                "prodi": float(avg_prodi),
+                "lpmi": float(avg_lpmi),
+                "assesor": float(avg_assesor),
 
                 "this_to_assesor": avg_lpmi - avg_assesor,
-                "this_to_max": bobot - avg_lpmi,
+                "this_to_max": (float(bobot) - avg_lpmi) if bobot is not None else 0,
 
                 "last_to_assesor": (
-                    last_avg_lpmi - last_avg_assesor
-                    if last else None
+                    float(last_avg_lpmi) - float(last_avg_assesor)
+                    if last and last_avg_lpmi is not None and last_avg_assesor is not None 
+                    else None
                     ),
                 "last_to_max": (
-                    bobot - last_avg_lpmi
-                    if last else None
+                    float(bobot) - float(last_avg_lpmi)
+                    if last and last_avg_lpmi is not None and bobot is not None
+                    else None
                     ),
 
-                "percentage": (avg_assesor / bobot) * 100 if bobot else 0,
+                "percentage": (avg_assesor / float(bobot)) * 100 if bobot and bobot > 0 else 0,
             })
 
         table.sort(key=lambda x: x["weight"], reverse=True)
 
+        consistency_score = None
+        
+        if has_lpmi_or_assesor_data and table and total_max_possible_gap > 0:
+            avg_gap_prodi_lpmi_pct = (total_gap_prodi_lpmi / total_max_possible_gap) * 100
+            avg_gap_lpmi_assesor_pct = (total_gap_lpmi_assesor / total_max_possible_gap) * 100
+            overall_inconsistency = (avg_gap_prodi_lpmi_pct + avg_gap_lpmi_assesor_pct) / 2
+            consistency_score = max(0, 100 - overall_inconsistency)
+            
+            consistency_score = round(consistency_score, 2)
+        else:
+            consistency_score = None
+
         radar_data = (
             db.session.query(
                 LamInfokom.kode_kriteria,
+                LamInfokom.kriteria,
                 func.sum(LamInfokom.bobot).label("total_weight"),
                 func.sum(Jawaban.skor_prodi).label("prodi"),
                 func.sum(Jawaban.skor_lpmi).label("lpmi"),
@@ -703,9 +767,8 @@ def get_dashboard_detail_infokom():
                 (Jawaban.id_qs == LamInfokom.id_qs) &
                 (Jawaban.q_no == LamInfokom.q_no)
             )
-            .filter(Jawaban.id_akreditasi == id_akreditasi,
-                    Akreditasi.status == 'Reviewed')
-            .group_by(LamInfokom.kode_kriteria)
+            .filter(Jawaban.id_akreditasi == id_akreditasi)
+            .group_by(LamInfokom.kode_kriteria, LamInfokom.kriteria)
             .order_by(LamInfokom.kode_kriteria)
             .all()
         )
@@ -717,10 +780,10 @@ def get_dashboard_detail_infokom():
 
         for row in radar_data:
             weight = row.total_weight or 1
-            labels.append(row.kriteria)
-            prodi.append((row.prodi or 0) / weight * 100)
-            lpmi.append((row.lpmi or 0) / weight * 100)
-            assesor.append((row.assesor or 0) / weight * 100)
+            labels.append(f"{row.kriteria}")
+            prodi.append(((row.prodi or 0) / weight) * 100)
+            lpmi.append(((row.lpmi or 0) / weight) * 100)
+            assesor.append(((row.assesor or 0) / weight) * 100)
 
         radar = {
             "labels": labels,
@@ -732,14 +795,21 @@ def get_dashboard_detail_infokom():
         }
 
         gap_heatmap = []
+        max_gap_assesor = None
         for row in radar_data:
             weight = row.total_weight or 1
 
             gap_heatmap.append({
-                "criteria": row.kode_kriteria,
-                "prodi_vs_lpmi": round(row.lpmi - row.prodi, 2),
-                "lpmi_vs_assesor": round(row.assesor - row.lpmi, 2),
+                "criteria": row.kriteria,
+                "prodi_vs_lpmi": round(float(row.lpmi or 0) - float(row.prodi or 0), 2),
+                "lpmi_vs_assesor": round(float(row.assesor or 0) - float(row.lpmi or 0), 2),
             })
+
+            if (max_gap_assesor is None or abs(gap_lpmi_assesor) > abs(max_gap_assesor["value"])):
+                max_gap_assesor = {
+                    "criteria": row.kriteria,
+                    "value": gap_lpmi_assesor
+                    }
 
         akreditasi = (
             db.session.query(
@@ -749,8 +819,8 @@ def get_dashboard_detail_infokom():
                 func.sum(Akreditasi.total_skor_assesor),
                 )
                 .filter(
-                Akreditasi.id_qs == id_qs,
-                Akreditasi.status == 'Reviewed'
+                # Akreditasi.id_qs == id_qs,
+                Akreditasi.id_prodi == akreditasi_obj.id_prodi
                 )
                 .group_by(Akreditasi.tahun_berlaku)
                 .order_by(cast(func.substr(Akreditasi.tahun_berlaku, 6, 4), Integer).desc())
@@ -761,18 +831,21 @@ def get_dashboard_detail_infokom():
         bar = {
             "labels": [r[0] for r in akreditasi],
             "datasets": {
-                "prodi": [r[1] or 0 for r in akreditasi],
-                "lpmi": [r[2] or 0 for r in akreditasi],
-                "assesor": [r[3] or 0 for r in akreditasi],
+                "prodi": [float(r[1] or 0) for r in akreditasi],
+                "lpmi": [float(r[2] or 0) for r in akreditasi],
+                "assesor": [float(r[3] or 0) for r in akreditasi],
                 }
                 }
         
-        raw_df = fetch_data_from_db('infokom')
-        
-        if not raw_df.empty:
-            prepared_df =prepare_features(raw_df)
-            prediction_df = predict_future_scores(prepared_df, major= akreditasi_obj.prodi.nama_prodi)
+        raw_df = fetch_data_from_db('infokom', id_prodi= akreditasi_obj.id_prodi, current_year=akreditasi_obj.tahun_berlaku)
+        prediction_df = None
 
+        
+        if raw_df is not None and not raw_df.empty:
+            feature_df = prepare_features(raw_df)
+            prepared_df = aggregate_per_exam(feature_df)
+            features = prepared_df.groupby(["major", "exam"], as_index=False).last()
+            prediction_df, importance = predict_future_scores(feat=features)
 
         return success_response(
             data={
@@ -780,18 +853,22 @@ def get_dashboard_detail_infokom():
                 "radar": radar,
                 "bar": bar,
                 "gap_heatmap": gap_heatmap,
+                'raw_df': raw_df.to_dict(orient="records"),
+                'importance': importance.tolist(),
+                "max_gap_assesor": max_gap_assesor,
+                "consistency": consistency_score,
                 "prediction": (
                     prediction_df.iloc[0].to_dict()
-                    if not prediction_df.empty
+                    if prediction_df is not None and not prediction_df.empty
                     else None
-                    )
+                    ),
             },
             message="Detail akreditasi berhasil diambil"
         )
 
     except Exception as e:
         return handle_exception(e)
-
+    
 @akreditasi_bp.route("/akreditasi/dashboard/detail/emba", methods=["GET"])
 @jwt_required()
 def get_dashboard_detail_emba():
@@ -803,49 +880,6 @@ def get_dashboard_detail_emba():
         
         akreditasi_obj = Akreditasi.query.get(id_akreditasi)
         id_qs = akreditasi_obj.id_qs
-        
-        # year_data = (
-        #     db.session.query(
-        #         Akreditasi.id_akreditasi,
-        #         Akreditasi.tahun_berlaku
-        #         )
-        #         .filter(
-        #             Akreditasi.id_qs == id_qs,
-        #             Akreditasi.status == 'Reviewed'
-        #             )
-        #             .order_by(
-        #                 cast(func.substr(Akreditasi.tahun_berlaku, 6, 4), Integer).asc()
-        #                 )
-        #                 .all()
-        #                 )
-        
-        # current_index = None
-        # for i, row in enumerate(year_data):
-        #     if row.id_akreditasi == id_akreditasi:
-        #         current_index = i
-        #         break
-
-        # last_akreditasi_id = None
-        # if current_index is not None and current_index > 0:
-        #     last_akreditasi_id = year_data[current_index - 1].id_akreditasi
-        
-        # last_detail_data = []
-        
-        # if last_akreditasi_id:
-        #     last_detail_data = (
-        #         db.session.query(
-        #             LamEmba.bobot,
-        #             Jawaban.skor_lpmi,
-        #             Jawaban.skor_assesor,
-        #             )
-        #         .join(
-        #             Jawaban,
-        #             (Jawaban.id_qs == LamEmba.id_qs) &
-        #             (Jawaban.q_no == LamEmba.q_no)
-        #             )
-        #         .filter(Jawaban.id_akreditasi == last_akreditasi_id)
-        #         .all()
-        #         )
 
         detail_data = (
             db.session.query(
@@ -908,7 +942,6 @@ def get_dashboard_detail_emba():
                 (Jawaban.q_no == LamEmba.q_no)
             )
             .filter(Jawaban.id_akreditasi == id_akreditasi,
-                    Akreditasi.status == 'Reviewed'
                     )
             .group_by(LamEmba.kode_kriteria)
             .order_by(LamEmba.kode_kriteria)
@@ -923,9 +956,13 @@ def get_dashboard_detail_emba():
         for row in radar_data:
             weight = row.total_weight or 1
             labels.append(row.kode_kriteria)
-            prodi.append((row.prodi or 0) / weight * 100)
-            lpmi.append((row.lpmi or 0) / weight * 100)
-            assesor.append((row.assesor or 0) / weight * 100)
+            prodi_val = float(row.prodi or 0)
+            lpmi_val = float(row.lpmi or 0)
+            assesor_val = float(row.assesor or 0)
+            
+            prodi.append((prodi_val / weight) * 100 if weight > 0 else 0)
+            lpmi.append((lpmi_val / weight) * 100 if weight > 0 else 0)
+            assesor.append((assesor_val / weight) * 100 if weight > 0 else 0)
 
         radar = {
             "labels": labels,
@@ -939,11 +976,14 @@ def get_dashboard_detail_emba():
         gap_heatmap = []
         for row in radar_data:
             weight = row.total_weight or 1
+            prodi_val = float(row.prodi or 0)
+            lpmi_val = float(row.lpmi or 0)
+            assesor_val = float(row.assesor or 0)
 
             gap_heatmap.append({
                 "criteria": row.kode_kriteria,
-                "prodi_vs_lpmi": round(row.lpmi - row.prodi, 2),
-                "lpmi_vs_assesor": round(row.assesor - row.lpmi, 2),
+                "prodi_vs_lpmi": round(lpmi_val - prodi_val, 2),
+                "lpmi_vs_assesor": round(assesor_val - lpmi_val, 2),
             })
 
         akreditasi = (
@@ -955,7 +995,7 @@ def get_dashboard_detail_emba():
                 )
                 .filter(
                 Akreditasi.id_qs == id_qs,
-                Akreditasi.status == 'Reviewed'
+                Akreditasi.id_prodi == akreditasi_obj.id_prodi
                 )
                 .group_by(Akreditasi.tahun_berlaku)
                 .order_by(cast(func.substr(Akreditasi.tahun_berlaku, 6, 4), Integer).desc())
@@ -966,17 +1006,20 @@ def get_dashboard_detail_emba():
         bar = {
             "labels": [r[0] for r in akreditasi],
             "datasets": {
-                "prodi": [r[1] or 0 for r in akreditasi],
-                "lpmi": [r[2] or 0 for r in akreditasi],
-                "assesor": [r[3] or 0 for r in akreditasi],
+                "prodi": [float(r[1] or 0) for r in akreditasi],
+                "lpmi": [float(r[2] or 0) for r in akreditasi],
+                "assesor": [float(r[3] or 0) for r in akreditasi],
                 }
                 }
         
-        raw_df = fetch_data_from_db('emba')
+        # raw_df = fetch_data_from_db('emba')
+        # prediction_df = None
         
-        if not raw_df.empty:
-            prepared_df =prepare_features(raw_df)
-            prediction_df = predict_future_scores(prepared_df, major= akreditasi_obj.prodi.nama_prodi)
+        # if raw_df is not None and not raw_df.empty:
+        #     prepared_df = prepare_features(raw_df)
+        #     prediction_df = predict_future_scores(prepared_df, major=akreditasi_obj.prodi.kode_prodi)
+
+        prediction_df = predict_future_scores(filtered='emba')
 
         return success_response(
             data={
@@ -986,7 +1029,7 @@ def get_dashboard_detail_emba():
                 "gap_heatmap": gap_heatmap,
                 "prediction": (
                     prediction_df.iloc[0].to_dict()
-                    if not prediction_df.empty
+                    if prediction_df is not None and not prediction_df.empty
                     else None
                     )
             },
@@ -1063,3 +1106,79 @@ def update_akreditasi(id):
     except Exception as e:
         db.session.rollback()
         return handle_exception(e)
+
+@akreditasi_bp.route("/akreditasi/report", methods=["GET"])
+@jwt_required()
+@role_required('ADMIN', 'SUPERADMIN', 'UPPS', 'LPMI')
+def get_report():
+    id_lembaga = request.args.get("id_lembaga", type=int)
+    tahun_berlaku = request.args.get("tahun_berlaku")
+
+    if not tahun_berlaku:
+            return error_response("Year must be filled", 400)
+    
+    raw_df = fetch_data_from_db(year=tahun_berlaku)
+
+    if raw_df.empty:
+        return success_response(message="No data available")
+    
+    filtered_df = raw_df.copy()
+    
+    if id_lembaga == 1:
+        filtered_df = filtered_df[
+        filtered_df["exam"] == "laminfokom"
+    ]
+    
+    elif id_lembaga == 2:
+        filtered_df = filtered_df[
+        filtered_df["exam"] == "lamemba"
+    ]
+        
+    indicator_df = generate_indicator_table(raw_df)
+
+    bar_df = (
+        raw_df
+        .groupby(["major", "exam"])
+        .agg({
+        "jawaban_prodi": "sum",
+        "jawaban_lpmi": "sum",
+        "jawaban_assessor": "sum"
+        })
+        .reset_index()
+        .rename(columns={
+        "jawaban_prodi": "total_prodi",
+        "jawaban_lpmi": "total_lpmi",
+        "jawaban_assessor": "total_assesor"
+        })
+        )
+    bar_df["LAM"] = bar_df["exam"].replace({
+    "laminfokom": "Infokom",
+    "lamemba": "Emba"})
+    
+    bar_df = bar_df.drop(columns=["exam"])
+
+    labels = indicator_df["major"].tolist()
+
+    radar = {
+        "labels": labels,
+        "datasets": {
+            "u": indicator_df["indikator_u"].tolist(),
+            "m": indicator_df["indikator_m"].tolist(),
+            "bm": indicator_df["indikator_bm"].tolist()
+        }
+    }
+    
+    prepared_df =prepare_features(filtered_df)
+    features = aggregate_per_exam(prepared_df)
+
+    risk_exam, risk_major = compute_and_combine_risk_metrics(features, year=tahun_berlaku.str.extract(r"(\d{4})")[0] )
+    
+    return success_response( 
+        data={
+        "risk_per_major": risk_major.to_dict(orient="records"),
+        "bar_data": bar_df.to_dict(orient="records"),
+        "indicator_table": indicator_df.to_dict(orient="records"),
+        "radar": radar
+        },
+        message="Report fetched!"
+    )

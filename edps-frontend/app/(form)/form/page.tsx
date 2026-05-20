@@ -41,6 +41,7 @@ interface FormData {
     is_lpmi?: boolean;
     is_admin?: boolean;
     lembaga?: number;
+    closed?: boolean;
 }
 
 function FormPage() {
@@ -351,10 +352,13 @@ function FormPage() {
     const status = formData?.status;
     const shouldDisabled =
         status === "Reviewed" ||
-        ((status === "Submitted" || status === "Validated") && !isLPMI) ||
-        (status === "Validated" && formData?.is_lpmi);
+        formData?.closed ||
+        (status != 'In Progress' && !isLPMI) ||
+        (status != "Submitted" && status != "Validating" && formData?.is_lpmi) ||
+        (status != "Validated" && status != "Reviewing" && formData?.is_admin);
     const isRecapPage = formData?.lembaga == 2 && currentPage === pertanyaan.length + 2;
     const isDosenPage = formData?.lembaga == 2 && currentPage === pertanyaan.length + 1;
+    
     return (
         <Box sx={{ mx: "auto" }}>
             <Box sx={{
@@ -420,7 +424,7 @@ function FormPage() {
                 />
             ) : (
                 <>
-                    <Typography variant="h4" sx={{ mb: 3 }}>{isDosenPage ? 'Pemenuhan Syarat Kualitikasi Dosen untuk Syarat Perlu Terakreditasi Unggul' : formData?.lembaga == 1? q.no_kriteria : `Kriteria ${q.kode_kriteria}:`} { !isDosenPage && q.kriteria}</Typography>
+                    <Typography variant="h4" sx={{ mb: 3 }}>{isDosenPage ? 'Pemenuhan Syarat Kualitikasi Dosen untuk Syarat Perlu Terakreditasi Unggul' : formData?.lembaga == 1 ? q.no_kriteria : `Kriteria ${q.kode_kriteria}:`} {!isDosenPage && q.kriteria}</Typography>
 
                     <Grid container spacing={2} gap={2}>
                         <Grid size={1.5}>
@@ -448,214 +452,249 @@ function FormPage() {
                                         {formData?.lembaga == 1 ? q.elemen_penilaian_lam : q.deskripsi_pertanyaan}
                                         {q.mandatory ? '*' : ''}
                                     </Typography>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                                        <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                            {formData?.lembaga == 1 ? 'Deskriptor' : 'Dimensi'}
-                                        </Typography>
-                                        <Typography variant="body1">
-                                            {formData?.lembaga == 1 ? q.deskripsi_pertanyaan : q.kriteria}
-                                        </Typography>
-                                    </Box>
-
-                                    {formData?.lembaga == 1 &&
-                                        <Box sx={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 6,
-                                            flexWrap: 'wrap',
-                                            mb: 3
-                                        }}>
+                                    
+                                    <Grid container spacing={2} sx={{ mb: 3 }}>
+                                        <Grid size={{ xs: 12, sm: 2 }}>
                                             <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                                Input
+                                                {formData?.lembaga == 1 ? 'Deskriptor' : 'Dimensi'}
                                             </Typography>
-                                            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                                                <Link
-                                                    component="button"
-                                                    onClick={openFileManager}
-                                                    underline="none"
-                                                    sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
-                                                    disabled={(formData?.status != 'In Progress')}
-                                                >
-                                                    <UploadIcon />
-                                                    Dokumen Pendukung<span className="text-red-500">*</span>
-                                                    <input
-                                                        type="file"
-                                                        hidden
-                                                        ref={fileInputRef}
-                                                        onChange={handleFileChange}
-                                                        disabled={(formData?.status != 'In Progress')}
-                                                    />
-                                                </Link>
+                                        </Grid>
+                                        <Grid size={{ xs: 12, sm: 10 }}>
+                                            <Typography variant="body1">
+                                                {formData?.lembaga == 1 ? q.deskripsi_pertanyaan : q.kriteria}
+                                            </Typography>
+                                        </Grid>
+                                    </Grid>
+                                    {formData?.lembaga == 1 && (
+                                        <Grid container spacing={2} sx={{ mb: 3 }}>
+                                            <Grid size={{ xs: 12, sm: 2 }}>
+                                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                                    Input
+                                                </Typography>
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 10 }}>
+                                                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                                    <Link
+                                                        component="button"
+                                                        onClick={openFileManager}
+                                                        underline="none"
+                                                        sx={{
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: 0.5,
+                                                            cursor: (formData?.status != 'In Progress' || formData?.is_lpmi || formData?.is_admin || formData?.closed) ? "not-allowed" : "pointer"
+                                                        }}
+                                                        disabled={(formData?.status != 'In Progress' || formData?.is_lpmi || formData?.is_admin || formData?.closed)}
+                                                    >
+                                                        <UploadIcon />
+                                                        Dokumen Pendukung<span className="text-red-500">*</span>
+                                                        <input
+                                                            type="file"
+                                                            hidden
+                                                            ref={fileInputRef}
+                                                            onChange={handleFileChange}
+                                                            disabled={(formData?.status != 'In Progress' || formData?.is_lpmi || formData?.is_admin || formData?.closed)}
+                                                        />
+                                                    </Link>
 
-                                                {files[q.q_no]?.length > 0 && (
-                                                    <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
-                                                        {files[q.q_no].map((file) => (
-                                                            <Chip
-                                                                key={file.id_file}
-                                                                label={file.file_name}
-                                                                size="small"
-                                                                color="primary"
-                                                                onClick={() => downloadFile(file.id_file)}
-                                                                // onClick={() => {
-                                                                //     window.open(
-                                                                //         `http://localhost:5000/jawaban-user/download_file/${file.id_file}`,
-                                                                //         "_blank"
-                                                                //     );
-                                                                // }}
-                                                                onDelete={formData?.status === 'Submitted' || !formData?.is_lpmi
-                                                                    ? undefined
-                                                                    : () => deleteFile(file.id_file)}
-                                                                sx={{ maxWidth: "150px" }}
-                                                            />
-                                                        ))}
-                                                    </Box>
-                                                )}
-                                            </Box>
-                                        </Box>
-                                    }
+                                                    {files[q.q_no]?.length > 0 && (
+                                                        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+                                                            {files[q.q_no].map((file) => (
+                                                                <Chip
+                                                                    key={file.id_file}
+                                                                    label={file.file_name}
+                                                                    size="small"
+                                                                    color="primary"
+                                                                    onClick={() => downloadFile(file.id_file)}
+                                                                    onDelete={formData?.status === 'Submitted' || !formData?.is_lpmi || !formData?.is_admin || formData?.closed
+                                                                        ? undefined
+                                                                        : () => deleteFile(file.id_file)}
+                                                                    sx={{ maxWidth: "150px" }}
+                                                                />
+                                                            ))}
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            </Grid>
+                                        </Grid>
+                                    )}
 
                                     <Divider sx={{ mb: 2, borderBottom: '3px solid #ccc' }} />
-                                    {isLPMI &&
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 6, mb: 3 }}>
-                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                                Prodi
-                                            </Typography>
-                                            <Typography variant="body1">
-                                                : {getIndicatorScore(q, getAnswer[q.q_no]?.jawaban_prodi)?.score}
-                                            </Typography>
-                                        </Box>}
-                                    {(!formData?.is_lpmi && (["Validated", "Reviewed", "Reviewing"].includes(status || ""))) &&
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 6, mb: 3 }}>
-                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                                LPMI
-                                            </Typography>
-                                            <Typography variant="body1">
-                                                : {getIndicatorScore(q, getAnswer[q.q_no]?.jawaban_lpmi)?.score}
-                                            </Typography>
-                                        </Box>}
-                                    {(!formData?.is_admin && (["Reviewed"].includes(status || ""))) &&
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 3.5, mb: 3 }}>
-                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                                Assesor
-                                            </Typography>
-                                            <Typography variant="body1">
-                                                : {getIndicatorScore(q, getAnswer[q.q_no]?.jawaban_assesor)?.score}
-                                            </Typography>
-                                        </Box>}
+                                    
+                                    {isLPMI && (
+                                        <Grid container spacing={2} sx={{ mb: 3 }}>
+                                            <Grid size={{ xs: 12, sm: 2 }}>
+                                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                                    Prodi
+                                                </Typography>
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 10 }}>
+                                                <Typography variant="body1">
+                                                    : {getIndicatorScore(q, getAnswer[q.q_no]?.jawaban_prodi)?.score || '-'}
+                                                </Typography>
+                                            </Grid>
+                                        </Grid>
+                                    )}
+                                    
+                                    {(!formData?.is_lpmi && (["Validated", "Reviewed", "Reviewing"].includes(status || ""))) && (
+                                        <Grid container spacing={2} sx={{ mb: 3 }}>
+                                            <Grid size={{ xs: 12, sm: 2 }}>
+                                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                                    LPMI
+                                                </Typography>
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 10 }}>
+                                                <Typography variant="body1">
+                                                    : {getIndicatorScore(q, getAnswer[q.q_no]?.jawaban_lpmi)?.score || '-'}
+                                                </Typography>
+                                            </Grid>
+                                        </Grid>
+                                    )}
+                                    
+                                    {(!formData?.is_admin && (["Reviewed"].includes(status || ""))) && (
+                                        <Grid container spacing={2} sx={{ mb: 3 }}>
+                                            <Grid size={{ xs: 12, sm: 2 }}>
+                                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                                    Assesor
+                                                </Typography>
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 10 }}>
+                                                <Typography variant="body1">
+                                                    : {getIndicatorScore(q, getAnswer[q.q_no]?.jawaban_assesor)?.score || '-'}
+                                                </Typography>
+                                            </Grid>
+                                        </Grid>
+                                    )}
 
-                                    <Box sx={{
-                                        display: 'flex',
-                                        gap: 4,
-                                        flexWrap: 'wrap',
-                                        mb: 3,
-                                    }}>
-                                        <Typography variant="subtitle1" fontWeight="bold">
-                                            Answer
-                                        </Typography>
-                                        <Box sx={{
-                                            backgroundColor: '#f5f5f5',
-                                            flex: 1,
-                                            px: 3,
-                                            py: 2,
-                                        }}>
-                                            <RadioGroup
-                                                name={`question-${q.q_no}`}
-                                                value={answers[q.q_no] ?? ""}
-                                                onChange={(e) => handleSelect(q.q_no, Number(e.target.value))}
-                                            >
-                                                {q.indikator_jawaban.map((choice) => (
-                                                    <Box key={choice.skor} sx={{ mb: 1 }}>
-                                                        <FormControlLabel
-                                                            value={choice.skor}
-                                                            control={<Radio color="primary" disabled={shouldDisabled} />}
-                                                            label={
-                                                                <Box>
-                                                                    <Typography variant="body1" fontWeight="medium">
-                                                                        {formData?.lembaga == 1 ? `Skor ${choice.skor}` : choice.deskripsi}
-                                                                    </Typography>
-                                                                    {formData?.lembaga == 1 &&
-                                                                        <Typography
-                                                                            variant="body2"
-                                                                            color="text.secondary"
-                                                                            sx={{ ml: 1 }}
-                                                                        >
-                                                                            {choice.deskripsi}
+                                    <Grid container spacing={2} sx={{ mb: 3 }}>
+                                        <Grid size={{ xs: 12, sm: 2 }}>
+                                            <Typography variant="subtitle1" fontWeight="bold">
+                                                Answer
+                                            </Typography>
+                                        </Grid>
+                                        <Grid size={{ xs: 12, sm: 10 }}>
+                                            <Box sx={{
+                                                backgroundColor: '#f5f5f5',
+                                                px: 3,
+                                                py: 2,
+                                            }}>
+                                                <RadioGroup
+                                                    name={`question-${q.q_no}`}
+                                                    value={answers[q.q_no] ?? ""}
+                                                    onChange={(e) => handleSelect(q.q_no, Number(e.target.value))}
+                                                >
+                                                    {q.indikator_jawaban.map((choice) => (
+                                                        <Box key={choice.skor} sx={{ mb: 1 }}>
+                                                            <FormControlLabel
+                                                                value={choice.skor}
+                                                                control={<Radio color="primary" disabled={shouldDisabled} />}
+                                                                label={
+                                                                    <Box>
+                                                                        <Typography variant="body1" fontWeight="medium">
+                                                                            {formData?.lembaga == 1 ? `Skor ${choice.skor}` : choice.deskripsi}
                                                                         </Typography>
-                                                                    }
-                                                                </Box>
-                                                            }
-                                                        />
-                                                        <Divider sx={{ mt: 1, mb: 1 }} />
-                                                    </Box>
-                                                ))}
-                                            </RadioGroup>
-                                        </Box>
-                                    </Box>
-                                    {(!formData?.is_lpmi && getAnswer[q.q_no]?.note_lpmi) &&
-                                        <Box sx={{ display: 'flex', gap: 1.5, mb: 3 }}>
-                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                                Explanation (LPMI)
-                                            </Typography>
-                                            <TextField
-                                                value={getAnswer[q.q_no].note_lpmi}
-                                                multiline
-                                                minRows={4}
-                                                fullWidth
-                                                placeholder="Tuliskan umpan balik di sini..."
-                                                disabled
-                                                sx={{
-                                                    "& .MuiOutlinedInput-root": {
-                                                        borderRadius: 2,
-                                                        backgroundColor: "white",
-                                                    },
-                                                }}
-                                            />
-                                        </Box>}
-                                    {(!isLPMI && getAnswer[q.q_no]?.note_assesor) &&
-                                        <Box sx={{ display: 'flex', mb: 3 }}>
-                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                                Explanation (Assesor)
-                                            </Typography>
-                                            <TextField
-                                                value={getAnswer[q.q_no].note_assesor}
-                                                multiline
-                                                minRows={4}
-                                                fullWidth
-                                                placeholder="Tuliskan umpan balik di sini..."
-                                                disabled
-                                                sx={{
-                                                    "& .MuiOutlinedInput-root": {
-                                                        borderRadius: 2,
-                                                        backgroundColor: "white",
-                                                    },
-                                                }}
-                                            />
-                                        </Box>}
-                                    {(formData?.is_lpmi || formData?.is_admin) &&
-                                        <Box sx={{ display: 'flex', gap: 4.3, mb: 3 }}>
-                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                                Explanation
-                                            </Typography>
-                                            <TextField
-                                                value={notes[q.q_no]}
-                                                onChange={(e) => handleNoteChange(q.q_no, e.target.value)}
-                                                multiline
-                                                minRows={4}
-                                                fullWidth
-                                                placeholder="Tuliskan umpan balik di sini..."
-                                                disabled={shouldDisabled}
-                                                sx={{
-                                                    "& .MuiOutlinedInput-root": {
-                                                        borderRadius: 2,
-                                                        backgroundColor: "white",
-                                                    },
-                                                }}
-                                            />
-                                        </Box>}
+                                                                        {formData?.lembaga == 1 &&
+                                                                            <Typography
+                                                                                variant="body2"
+                                                                                color="text.secondary"
+                                                                                sx={{ ml: 1 }}
+                                                                            >
+                                                                                {choice.deskripsi}
+                                                                            </Typography>
+                                                                        }
+                                                                    </Box>
+                                                                }
+                                                            />
+                                                            <Divider sx={{ mt: 1, mb: 1 }} />
+                                                        </Box>
+                                                    ))}
+                                                </RadioGroup>
+                                            </Box>
+                                        </Grid>
+                                    </Grid>
+                                    
+                                    {(!formData?.is_lpmi && getAnswer[q.q_no]?.note_lpmi) && (
+                                        <Grid container spacing={2} sx={{ mb: 3 }}>
+                                            <Grid size={{ xs: 12, sm: 2 }}>
+                                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                                    Explanation (LPMI)
+                                                </Typography>
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 10 }}>
+                                                <TextField
+                                                    value={getAnswer[q.q_no].note_lpmi}
+                                                    multiline
+                                                    minRows={4}
+                                                    fullWidth
+                                                    placeholder="Tuliskan umpan balik di sini..."
+                                                    disabled
+                                                    sx={{
+                                                        "& .MuiOutlinedInput-root": {
+                                                            borderRadius: 2,
+                                                            backgroundColor: "white",
+                                                        },
+                                                    }}
+                                                />
+                                            </Grid>
+                                        </Grid>
+                                    )}
+                                    
+                                    {(!isLPMI && getAnswer[q.q_no]?.note_assesor) && (
+                                        <Grid container spacing={2} sx={{ mb: 3 }}>
+                                            <Grid size={{ xs: 12, sm: 2 }}>
+                                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                                    Explanation (Assesor)
+                                                </Typography>
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 10 }}>
+                                                <TextField
+                                                    value={getAnswer[q.q_no].note_assesor}
+                                                    multiline
+                                                    minRows={4}
+                                                    fullWidth
+                                                    placeholder="Tuliskan umpan balik di sini..."
+                                                    disabled
+                                                    sx={{
+                                                        "& .MuiOutlinedInput-root": {
+                                                            borderRadius: 2,
+                                                            backgroundColor: "white",
+                                                        },
+                                                    }}
+                                                />
+                                            </Grid>
+                                        </Grid>
+                                    )}
+                                    
+                                    {(formData?.is_lpmi || formData?.is_admin) && (
+                                        <Grid container spacing={2} sx={{ mb: 3 }}>
+                                            <Grid size={{ xs: 12, sm: 2 }}>
+                                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                                    Explanation
+                                                </Typography>
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 10 }}>
+                                                <TextField
+                                                    value={notes[q.q_no]}
+                                                    onChange={(e) => handleNoteChange(q.q_no, e.target.value)}
+                                                    multiline
+                                                    minRows={4}
+                                                    fullWidth
+                                                    placeholder="Tuliskan umpan balik di sini..."
+                                                    disabled={shouldDisabled}
+                                                    sx={{
+                                                        "& .MuiOutlinedInput-root": {
+                                                            borderRadius: 2,
+                                                            backgroundColor: "white",
+                                                        },
+                                                    }}
+                                                />
+                                            </Grid>
+                                        </Grid>
+                                    )}
                                 </Paper>
                             </Grid>
                         }
-                        {formData?.lembaga == 1 &&
+                        {formData?.lembaga == 1 && (
                             <Grid size={2}>
                                 <WeightSummaryTable
                                     data={weightSummary}
@@ -664,8 +703,10 @@ function FormPage() {
                                     maxPoints={formData?.total_max_bobot}
                                 />
                             </Grid>
-                        }
-                    </Grid> </>)}
+                        )}
+                    </Grid>
+                </>
+            )}
 
             <Box
                 sx={{

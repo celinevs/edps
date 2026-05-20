@@ -7,8 +7,10 @@ import {
   DashboardInfokom,
   Akreditasi,
   DashboardEmba,
-  AkreditasiHelp
+  AkreditasiHelp,
+  ReportData,
 } from "@/model/Akreditasi";
+import { ChartDataPoint } from "@/app/(dashboard)/ml/page";
 
 export const addTagTypes = ["akreditasi"];
 
@@ -156,12 +158,26 @@ export const akreditasiApi = baseApi
         providesTags: ["akreditasi"],
       }),
       getDashboardML: builder.query<
-        APIResponse<any>,
+        APIResponse<ChartDataPoint[]>,
         void
       >({
         query: () => ({
           url: `/ml-dashboard`,
           method: "GET",
+        }),
+        providesTags: ["akreditasi"],
+      }),
+      getReport: builder.query<
+        APIResponse<ReportData>,
+        {
+          tahun_berlaku: string;
+          id_lembaga?: number;
+        }
+      >({
+        query: (params) => ({
+          url: `/akreditasi/report`,
+          method: "GET",
+          params
         }),
         providesTags: ["akreditasi"],
       }),
@@ -187,5 +203,7 @@ export const {
   useLazyGetDashboardEmbaDetailQuery,
   useGetAkreditasiHelpIdMutation,
   useGetDashboardMLQuery,
-  useLazyGetDashboardMLQuery
+  useLazyGetDashboardMLQuery,
+  useGetReportQuery,
+  useLazyGetReportQuery
 } = akreditasiApi;
