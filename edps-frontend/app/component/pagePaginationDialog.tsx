@@ -50,7 +50,7 @@ function PagePaginationDialog(props: PagePaginationDialogProps) {
                         {Array.from({ length: totalPage }, (_, i) => {
                             const page = i + 1;
                             const isSelected = page === currentPage;
-                            const isAnswered = answers[pertanyaan[i]?.q_no];
+                            const isAnswered = pertanyaan[i]?.q_no in answers;
 
                             return (
                                 <Button

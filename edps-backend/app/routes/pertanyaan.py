@@ -204,6 +204,23 @@ def import_question_csv():
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             return error_response(f"Invalid file format. Missing required columns: {missing_columns}", 400)
+        
+        kriteria_mapping = (df.groupby("kode_kriteria")["kriteria"].nunique())
+        
+        invalid_kriteria = kriteria_mapping[kriteria_mapping > 1]
+        
+        if not invalid_kriteria.empty:
+            invalid_details = []
+            for kode in invalid_kriteria.index:
+                values = (
+                    df[df["kode_kriteria"] == kode]["kriteria"]
+                    .dropna()
+                    .unique()
+                    .tolist()
+                    )
+                invalid_details.append(f"{kode}: {values}")
+                
+            return error_response(f"kode_kriteria has multiple kriteria values -> {'; '.join(invalid_details)}",400)
 
         for index, row in df.iterrows():
             if id_lembaga == 1:
@@ -357,6 +374,24 @@ def update_question_csv(id_qs):
             missing_columns = [col for col in required_columns if col not in df.columns]
             if missing_columns:
                 return error_response(f"Invalid file format. Missing required columns: {missing_columns}", 400)
+            
+            kriteria_mapping = (df.groupby("kode_kriteria")["kriteria"].nunique())
+        
+            invalid_kriteria = kriteria_mapping[kriteria_mapping > 1]
+        
+            if not invalid_kriteria.empty:
+                invalid_details = []
+                for kode in invalid_kriteria.index:
+                    values = (
+                    df[df["kode_kriteria"] == kode]["kriteria"]
+                    .dropna()
+                    .unique()
+                    .tolist()
+                    )
+                    invalid_details.append(f"{kode}: {values}")
+                
+                return error_response(f"kode_kriteria has multiple kriteria values -> {'; '.join(invalid_details)}",400)
+
             
             if qs.id_lembaga == 1:
                 LamInfokom.query.filter_by(id_qs=id_qs).delete()

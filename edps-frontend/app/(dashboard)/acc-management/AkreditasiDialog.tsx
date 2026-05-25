@@ -33,7 +33,7 @@ export const AkreditasiRequestSchema = z.object({
     tanggal_selesai_prodi: z.string().min(1),
     tanggal_selesai_lpmi: z.string().min(1),
     tahun_mulai: z.string().min(1),
-    tahun_selesai: z.string().min(1),
+    // tahun_selesai: z.string().min(1),
     id_qs: z.string().min(1),
     id_prodi: z.string().min(1),
     nama_akreditasi: z.string().min(1)
@@ -66,7 +66,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
         tanggal_selesai_prodi: '',
         tanggal_selesai_lpmi: '',
         tahun_mulai: '',
-        tahun_selesai: '',
+        // tahun_selesai: '',
         id_qs: '',
         id_prodi: '',
         nama_akreditasi: ''
@@ -89,7 +89,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                 tanggal_selesai_prodi: formatDate(accData.tanggal_selesai),
                 tanggal_selesai_lpmi: formatDate(accData.tanggal_selesai_lpmi),
                 tahun_mulai: tahun_mulai || '',
-                tahun_selesai: tahun_selesai || '',
+                // tahun_selesai: tahun_selesai || '',
                 id_qs: accData.question_set.id_qs || '',
                 id_prodi: accData.prodi.id_prodi || '',
                 nama_akreditasi: accData.nama_akreditasi ?? ''
@@ -136,7 +136,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                         tanggal_mulai: data.tanggal_mulai,
                         tanggal_selesai_prodi: data.tanggal_selesai_prodi,
                         tanggal_selesai_lpmi: data.tanggal_selesai_lpmi,
-                        tahun_berlaku: `${data.tahun_mulai}/${data.tahun_selesai}`,
+                        tahun_berlaku: `${data.tahun_mulai}/${data.tahun_mulai + 1}`,
                         id_qs: data.id_qs,
                         nama_akreditasi: data.nama_akreditasi,
                         id_prodi: data.id_prodi
@@ -153,7 +153,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                     tanggal_mulai: data.tanggal_mulai,
                     tanggal_selesai_prodi: data.tanggal_selesai_prodi,
                     tanggal_selesai_lpmi: data.tanggal_selesai_lpmi,
-                    tahun_berlaku: `${data.tahun_mulai}/${data.tahun_selesai}`,
+                    tahun_berlaku: `${data.tahun_mulai}/${data.tahun_mulai + 1}`,
                     id_qs: data.id_qs,
                     nama_akreditasi: data.nama_akreditasi,
                     id_prodi: data.id_prodi
@@ -212,7 +212,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                             placeholder="Masukkan nama Akreditasi"
                         />
                         <Grid container spacing={2}>
-                            <Grid size={6}>
+                            <Grid size={12}>
                                 <DateInputController
                                     name="tahun_mulai"
                                     control={control}
@@ -222,7 +222,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                                     views={['year']}
                                 />
                             </Grid>
-                            <Grid size={6}>
+                            {/* <Grid size={6}>
                                 <DateInputController
                                     name="tahun_selesai"
                                     control={control}
@@ -231,7 +231,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                                     dataFormat="YYYY"
                                     views={['year']}
                                 />
-                            </Grid>
+                            </Grid> */}
                         </Grid>
                         <DateInputController
                             name="tanggal_mulai"

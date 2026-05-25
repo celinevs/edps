@@ -8,7 +8,7 @@ class Akreditasi(db.Model):
     id_qs = db.Column(db.String(36), db.ForeignKey("question_set.id_qs"), nullable=False)
     id_prodi = db.Column(db.String(36), db.ForeignKey("prodi.id_prodi"), nullable=False)
     nama_akreditasi = db.Column(db.String(50), nullable=True)
-    tahun_berlaku = db.Column(db.String(9), nullable=False)
+    tahun_berlaku = db.Column(db.String(9), nullable=False, unique=True)
 
     tanggal_pengisian = db.Column(db.DateTime)
     tanggal_validasi = db.Column(db.DateTime)

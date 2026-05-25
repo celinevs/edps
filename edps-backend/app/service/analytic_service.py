@@ -11,7 +11,7 @@ import os
 import joblib
 from sklearn.metrics import r2_score
 
-def fetch_data_from_db(filtered=None, id_prodi=None, year=None, current_year=None):
+def fetch_data_from_db(filtered=None, id_prodi=None, year=None, current_year=None, reviewed=False):
     """Fetch raw data from database using SQLAlchemy"""
 
     queries = []
@@ -42,6 +42,9 @@ def fetch_data_from_db(filtered=None, id_prodi=None, year=None, current_year=Non
     
     if year:
         common_filters.append(Akreditasi.tahun_berlaku == year)
+    
+    if reviewed:
+        common_filters.append(Akreditasi.status == 'Reviewed')
 
     # LAM INFOKOM QUERY
     if filtered != 'emba':
@@ -763,7 +766,7 @@ def predict_future_scores(
     optional_cols = ["total_bobot"]
     return_cols   = base_cols + [c for c in optional_cols if c in features.columns]
 
-    return features[return_cols].reset_index(drop=True), X
+    return features[return_cols].reset_index(drop=True)
 
 def get_actual_vs_predicted(
     models_dir: str = "ml",

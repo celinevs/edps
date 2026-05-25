@@ -2,6 +2,7 @@ from flask import Flask
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
+from requests.exceptions import RequestException
 
 db = SQLAlchemy()
 
@@ -42,6 +43,10 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+
+    @app.errorhandler(RequestException)
+    def handle_request_exception(e):
+        return error_response("Connection Error", 503)
     
     @jwt.token_in_blocklist_loader
     def check_if_token_is_revoked(jwt_header, jwt_payload: dict):

@@ -93,6 +93,16 @@ export const akreditasiApi = baseApi
         }),
         invalidatesTags: ["akreditasi"],
       }),
+      deleteAkreditasi: builder.mutation<
+        APIResponse<any>,
+        string
+      >({
+        query: (id) => ({
+          url: `/akreditasi/${id}`,
+          method: "DELETE"
+        }),
+        invalidatesTags: ["akreditasi"],
+      }),
       getAkreditasiHelpId: builder.mutation<
         APIResponse<AkreditasiHelp>,
         string
@@ -205,5 +215,6 @@ export const {
   useGetDashboardMLQuery,
   useLazyGetDashboardMLQuery,
   useGetReportQuery,
-  useLazyGetReportQuery
+  useLazyGetReportQuery,
+  useDeleteAkreditasiMutation
 } = akreditasiApi;

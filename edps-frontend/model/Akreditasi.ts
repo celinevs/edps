@@ -170,11 +170,20 @@ export interface GapHeatmap {
 
 }
 
+export interface MaxGap {
+    criteria: string;
+    source: string;
+    value: number;
+}
+
 export interface DashboardInfokom {
     table: TableItem[];
     radar: Chart;
     bar: Chart;
     consistency: number;
+    gap_heatmap: GapHeatmap[];
+    max_gap: MaxGap;
+    risk_major: RiskPerMajor;
 }
 
 export interface DashboardEmba {
@@ -182,6 +191,9 @@ export interface DashboardEmba {
     radar: Chart;
     bar: Chart;
     consistency: number;
+    gap_heatmap: GapHeatmap[];
+    max_gap: MaxGap;
+    risk_major: RiskPerMajor;
 }
 
 export interface AkreditasiHelp {

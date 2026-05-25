@@ -777,6 +777,8 @@ def get_dashboard_detail_infokom():
         prodi = []
         lpmi = []
         assesor = []
+        gap_heatmap = []
+        max_gap = None
 
         for row in radar_data:
             weight = row.total_weight or 1
@@ -784,6 +786,51 @@ def get_dashboard_detail_infokom():
             prodi.append(((row.prodi or 0) / weight) * 100)
             lpmi.append(((row.lpmi or 0) / weight) * 100)
             assesor.append(((row.assesor or 0) / weight) * 100)
+
+            prodi_vs_lpmi = round(float(row.lpmi or 0) - float(row.prodi or 0), 2)
+            lpmi_vs_assesor = round(float(row.assesor or 0) - float(row.lpmi or 0), 2)
+
+
+            gap_heatmap.append({
+                "criteria": row.kriteria,
+                "prodi_vs_lpmi": prodi_vs_lpmi,
+                "lpmi_vs_assesor": lpmi_vs_assesor,
+            })
+
+            # use assessor gap if exists
+            if row.assesor is not None:
+                current_gap = lpmi_vs_assesor
+                source = "LPMI vs Assesor"
+            else:
+                current_gap = prodi_vs_lpmi
+                source = "Prodi vs LPMI"
+
+            current_data = {
+                "criteria": row.kriteria,
+                "value": current_gap,
+                "source": source
+                }
+
+            if max_gap is None:
+                max_gap = current_data
+            else:
+                current_value = current_gap
+                max_value = max_gap["value"]
+
+                # PRIORITIZE NEGATIVE GAP
+                if current_value < 0 and max_value >= 0:
+                    max_gap = current_data
+
+                # both negative -> choose biggest absolute negative
+                elif current_value < 0 and max_value < 0:
+                    if abs(current_value) > abs(max_value):
+                        max_gap = current_data
+
+                # if both positive -> choose largest absolute
+                elif current_value >= 0 and max_value >= 0:
+                    if abs(current_value) > abs(max_value):
+                        max_gap = current_data
+
 
         radar = {
             "labels": labels,
@@ -793,23 +840,6 @@ def get_dashboard_detail_infokom():
                 "assesor": assesor
             }
         }
-
-        gap_heatmap = []
-        max_gap_assesor = None
-        for row in radar_data:
-            weight = row.total_weight or 1
-
-            gap_heatmap.append({
-                "criteria": row.kriteria,
-                "prodi_vs_lpmi": round(float(row.lpmi or 0) - float(row.prodi or 0), 2),
-                "lpmi_vs_assesor": round(float(row.assesor or 0) - float(row.lpmi or 0), 2),
-            })
-
-            if (max_gap_assesor is None or abs(gap_lpmi_assesor) > abs(max_gap_assesor["value"])):
-                max_gap_assesor = {
-                    "criteria": row.kriteria,
-                    "value": gap_lpmi_assesor
-                    }
 
         akreditasi = (
             db.session.query(
@@ -845,18 +875,20 @@ def get_dashboard_detail_infokom():
             feature_df = prepare_features(raw_df)
             prepared_df = aggregate_per_exam(feature_df)
             features = prepared_df.groupby(["major", "exam"], as_index=False).last()
-            prediction_df, importance = predict_future_scores(feat=features)
+            prediction_df = predict_future_scores(feat=features)
+            risk_exam, risk_major = compute_and_combine_risk_metrics(features)
 
         return success_response(
             data={
                 "table": table,
                 "radar": radar,
                 "bar": bar,
-                "gap_heatmap": gap_heatmap,
-                'raw_df': raw_df.to_dict(orient="records"),
-                'importance': importance.tolist(),
-                "max_gap_assesor": max_gap_assesor,
+                "gap_heatmap": (gap_heatmap if gap_heatmap is not None and not len(gap_heatmap) == 0 else None),
+                "max_gap": (max_gap if max_gap is not None else None),
                 "consistency": consistency_score,
+                "risk_major": (risk_major.iloc[0].to_dict() 
+                               if risk_major is not None and not risk_major.empty
+                               else None),
                 "prediction": (
                     prediction_df.iloc[0].to_dict()
                     if prediction_df is not None and not prediction_df.empty
@@ -880,54 +912,101 @@ def get_dashboard_detail_emba():
         
         akreditasi_obj = Akreditasi.query.get(id_akreditasi)
         id_qs = akreditasi_obj.id_qs
+        
+        # Get year data for previous accreditation period
+        year_data = (
+            db.session.query(
+                Akreditasi.id_akreditasi,
+                Akreditasi.tahun_berlaku
+                )
+                .filter(
+                    Akreditasi.id_qs == id_qs,
+                    Akreditasi.id_prodi == akreditasi_obj.id_prodi
+                    )
+                    .order_by(
+                        cast(func.substr(Akreditasi.tahun_berlaku, 6, 4), Integer).asc()
+                        )
+                        .all()
+                        )
+        
+        current_index = None
+        for i, row in enumerate(year_data):
+            if row.id_akreditasi == id_akreditasi:
+                current_index = i
+                break
 
+        last_akreditasi_id = None
+        if current_index is not None and current_index > 0:
+            last_akreditasi_id = year_data[current_index - 1].id_akreditasi
+        
+        # Get current detail data grouped by criteria
         detail_data = (
             db.session.query(
                 LamEmba.kode_kriteria,
                 LamEmba.kriteria,
-                LamEmba.q_no,
                 LamEmba.bobot,
-                LamEmba.id_qs,
                 LamEmba.mandatory,
-                Jawaban.skor_prodi,
-                Jawaban.skor_lpmi,
-                Jawaban.skor_assesor,
-                )
+                func.count(LamEmba.q_no).label("total_pertanyaan"),
+                func.sum(Jawaban.skor_prodi).label("total_prodi"),
+                func.sum(Jawaban.skor_lpmi).label("total_lpmi"),
+                func.sum(Jawaban.skor_assesor).label("total_assesor"),
+                func.sum(LamEmba.bobot).label("max_weight"),
+            )
             .join(Jawaban, (Jawaban.id_qs == LamEmba.id_qs) & (Jawaban.q_no == LamEmba.q_no))
             .filter(Jawaban.id_akreditasi == id_akreditasi)
-            .all())
+            .group_by(LamEmba.kode_kriteria, LamEmba.kriteria, LamEmba.bobot, LamEmba.mandatory)
+            .all()
+        )
         
-        kriteria_map = {}
-
+        # Build criteria table with mandatory pass validation
+        criteria_table = []
         for row in detail_data:
-            kriteria = row.kode_kriteria
-            mandatory = row.mandatory
-            skor_prodi = row.skor_prodi or 0
-            skor_lpmi = row.skor_lpmi or 0
-            skor_assesor = row.skor_assesor or 0
-            bobot = row.bobot 
+            # Check mandatory pass for this criteria
+            mandatory_pass = True
+            if row.mandatory:
+                # Get all mandatory questions for this criteria
+                mandatory_questions = (
+                    db.session.query(LamEmba.q_no, Jawaban.skor_assesor)
+                    .join(Jawaban, (Jawaban.id_qs == LamEmba.id_qs) & (Jawaban.q_no == LamEmba.q_no))
+                    .filter(
+                        Jawaban.id_akreditasi == id_akreditasi,
+                        LamEmba.kode_kriteria == row.kode_kriteria,
+                        LamEmba.mandatory == True
+                    )
+                    .all()
+                )
+                # Check if any mandatory question has skor_assesor != 1
+                for q in mandatory_questions:
+                    if q.skor_assesor != 1:
+                        mandatory_pass = False
+                        break
             
-            if kriteria not in kriteria_map:
-                kriteria_map[kriteria] = {
-            "kriteria": kriteria,
-            "total_pertanyaan": 0,
-            "total_prodi": 0,
-            "total_lpmi": 0,
-            "total_assesor": 0,
-            "max_weight": 0,
-            "mandatory_pass": True,
-            }
-            kriteria_map[kriteria]["total_pertanyaan"] += 1
-            kriteria_map[kriteria]["total_prodi"] += skor_prodi
-            kriteria_map[kriteria]["total_lpmi"] += skor_lpmi
-            kriteria_map[kriteria]["total_assesor"] += skor_assesor
-            kriteria_map[kriteria]["max_weight"] += bobot
-
-            if mandatory and skor_assesor != 1:
-                kriteria_map[kriteria]["mandatory_pass"] = False
+            criteria_table.append({
+                "kriteria": row.kode_kriteria,
+                "total_pertanyaan": row.total_pertanyaan,
+                "total_prodi": float(row.total_prodi or 0),
+                "total_lpmi": float(row.total_lpmi or 0),
+                "total_assesor": float(row.total_assesor or 0),
+                "max_weight": float(row.max_weight or 0),
+                "mandatory_pass": mandatory_pass,
+            })
         
-        kriteria_table = list(kriteria_map.values())
-
+        # Get last period data for comparison (if exists)
+        last_criteria_data = []
+        if last_akreditasi_id:
+            last_criteria_data = (
+                db.session.query(
+                    LamEmba.kode_kriteria,
+                    func.sum(Jawaban.skor_lpmi).label("total_lpmi"),
+                    func.sum(Jawaban.skor_assesor).label("total_assesor"),
+                )
+                .join(Jawaban, (Jawaban.id_qs == LamEmba.id_qs) & (Jawaban.q_no == LamEmba.q_no))
+                .filter(Jawaban.id_akreditasi == last_akreditasi_id)
+                .group_by(LamEmba.kode_kriteria)
+                .all()
+            )
+        
+        # Radar data with criteria grouping
         radar_data = (
             db.session.query(
                 LamEmba.kode_kriteria,
@@ -941,8 +1020,7 @@ def get_dashboard_detail_emba():
                 (Jawaban.id_qs == LamEmba.id_qs) &
                 (Jawaban.q_no == LamEmba.q_no)
             )
-            .filter(Jawaban.id_akreditasi == id_akreditasi,
-                    )
+            .filter(Jawaban.id_akreditasi == id_akreditasi)
             .group_by(LamEmba.kode_kriteria)
             .order_by(LamEmba.kode_kriteria)
             .all()
@@ -952,6 +1030,8 @@ def get_dashboard_detail_emba():
         prodi = []
         lpmi = []
         assesor = []
+        gap_heatmap = []
+        max_gap = None
 
         for row in radar_data:
             weight = row.total_weight or 1
@@ -964,6 +1044,44 @@ def get_dashboard_detail_emba():
             lpmi.append((lpmi_val / weight) * 100 if weight > 0 else 0)
             assesor.append((assesor_val / weight) * 100 if weight > 0 else 0)
 
+            prodi_vs_lpmi = round(lpmi_val - prodi_val, 2)
+            lpmi_vs_assesor = round(assesor_val - lpmi_val, 2)
+
+            gap_heatmap.append({
+                "criteria": row.kode_kriteria,
+                "prodi_vs_lpmi": prodi_vs_lpmi,
+                "lpmi_vs_assesor": lpmi_vs_assesor,
+            })
+
+            # Determine max gap
+            if assesor_val is not None:
+                current_gap = lpmi_vs_assesor
+                source = "LPMI vs Assesor"
+            else:
+                current_gap = prodi_vs_lpmi
+                source = "Prodi vs LPMI"
+
+            current_data = {
+                "criteria": row.kode_kriteria,
+                "value": current_gap,
+                "source": source
+                }
+
+            if max_gap is None:
+                max_gap = current_data
+            else:
+                current_value = current_gap
+                max_value = max_gap["value"]
+
+                if current_value < 0 and max_value >= 0:
+                    max_gap = current_data
+                elif current_value < 0 and max_value < 0:
+                    if abs(current_value) > abs(max_value):
+                        max_gap = current_data
+                elif current_value >= 0 and max_value >= 0:
+                    if abs(current_value) > abs(max_value):
+                        max_gap = current_data
+
         radar = {
             "labels": labels,
             "datasets": {
@@ -973,19 +1091,7 @@ def get_dashboard_detail_emba():
             }
         }
 
-        gap_heatmap = []
-        for row in radar_data:
-            weight = row.total_weight or 1
-            prodi_val = float(row.prodi or 0)
-            lpmi_val = float(row.lpmi or 0)
-            assesor_val = float(row.assesor or 0)
-
-            gap_heatmap.append({
-                "criteria": row.kode_kriteria,
-                "prodi_vs_lpmi": round(lpmi_val - prodi_val, 2),
-                "lpmi_vs_assesor": round(assesor_val - lpmi_val, 2),
-            })
-
+        # Bar chart data
         akreditasi = (
             db.session.query(
                 Akreditasi.tahun_berlaku,
@@ -1010,32 +1116,55 @@ def get_dashboard_detail_emba():
                 "lpmi": [float(r[2] or 0) for r in akreditasi],
                 "assesor": [float(r[3] or 0) for r in akreditasi],
                 }
-                }
+        }
         
-        # raw_df = fetch_data_from_db('emba')
-        # prediction_df = None
+        # Calculate consistency score using criteria data
+        consistency_score = None
+        if criteria_table:
+            total_gaps = 0
+            total_possible_gaps = 0
+            for row in criteria_table:
+                if row["max_weight"] > 0:
+                    gap = abs(row["total_lpmi"] - row["total_assesor"])
+                    max_possible_gap = row["max_weight"] * 0.75
+                    total_gaps += gap
+                    total_possible_gaps += max_possible_gap
+            
+            if total_possible_gaps > 0:
+                consistency_score = max(0, 100 - (total_gaps / total_possible_gaps) * 100)
+                consistency_score = round(consistency_score, 2)
         
-        # if raw_df is not None and not raw_df.empty:
-        #     prepared_df = prepare_features(raw_df)
-        #     prediction_df = predict_future_scores(prepared_df, major=akreditasi_obj.prodi.kode_prodi)
+        # Prediction and risk metrics
+        raw_df = fetch_data_from_db('emba', id_prodi=akreditasi_obj.id_prodi, current_year=akreditasi_obj.tahun_berlaku)
+        prediction_df = None
+        risk_major = None
 
-        prediction_df = predict_future_scores(filtered='emba')
+        if raw_df is not None and not raw_df.empty:
+            feature_df = prepare_features(raw_df)
+            prepared_df = aggregate_per_exam(feature_df)
+            features = prepared_df.groupby(["major", "exam"], as_index=False).last()
+            prediction_df = predict_future_scores(feat=features)
+            risk_exam, risk_major = compute_and_combine_risk_metrics(features)
 
         return success_response(
             data={
-                "table": kriteria_table,
+                "table": criteria_table,
                 "radar": radar,
                 "bar": bar,
-                "gap_heatmap": gap_heatmap,
+                "gap_heatmap": gap_heatmap if gap_heatmap and len(gap_heatmap) > 0 else None,
+                "max_gap": max_gap if max_gap is not None else None,
+                "consistency": consistency_score,
+                "risk_major": (risk_major.iloc[0].to_dict() 
+                               if risk_major is not None and not risk_major.empty
+                               else None),
                 "prediction": (
                     prediction_df.iloc[0].to_dict()
                     if prediction_df is not None and not prediction_df.empty
                     else None
-                    )
+                    ),
             },
             message="Detail akreditasi berhasil diambil"
         )
-
     except Exception as e:
         return handle_exception(e)
     
@@ -1059,6 +1188,12 @@ def add_akreditasi():
         for field in required_fields:
             if field not in data or not data[field]:
                 return error_response(f"{field} wajib diisi", 400)
+        
+        existing = Akreditasi.query.filter_by(id_prodi=data["id_prodi"] ,tahun_berlaku=data["tahun_berlaku"]).first()
+
+        if existing:
+            return error_response(
+                "Year already exists, please reselect another year", 400)
 
         akreditasi = Akreditasi(
             tanggal_mulai=datetime.strptime(data["tanggal_mulai"], "%Y-%m-%d"),
@@ -1090,6 +1225,12 @@ def update_akreditasi(id):
         akreditasi = Akreditasi.query.get(id)
         if not akreditasi:
             return error_response("Akreditasi tidak ditemukan", 404)
+        
+        existing = Akreditasi.query.filter_by(id_prodi=data["id_prodi"] ,tahun_berlaku=data["tahun_berlaku"]).first()
+
+        if existing:
+            return error_response(
+                "Year already exists, please reselect another year", 400)
 
         akreditasi.tanggal_mulai = datetime.strptime(data["tanggal_mulai"], "%Y-%m-%d")
         akreditasi.tanggal_selesai_prodi = datetime.strptime(data["tanggal_selesai_prodi"], "%Y-%m-%d")
@@ -1102,6 +1243,27 @@ def update_akreditasi(id):
         db.session.commit()
 
         return success_response(message="Akreditasi berhasil diperbarui")
+
+    except Exception as e:
+        db.session.rollback()
+        return handle_exception(e)
+
+@akreditasi_bp.route('/akreditasi/<string:id>', methods=["DELETE"])
+@jwt_required()
+@role_required('ADMIN', 'SUPERADMIN')
+def delete_akreditasi(id):
+    try:
+        akreditasi = Akreditasi.query.get(id)
+
+        if not akreditasi:
+            return error_response("Akreditasi not found", 404)
+
+        db.session.delete(akreditasi)
+        db.session.commit()
+
+        return success_response(
+            message="Akreditasi successfully deleted"
+        )
 
     except Exception as e:
         db.session.rollback()
@@ -1142,7 +1304,8 @@ def get_report():
         .agg({
         "jawaban_prodi": "sum",
         "jawaban_lpmi": "sum",
-        "jawaban_assessor": "sum"
+        "jawaban_assessor": "sum",
+        "bobot": "sum"
         })
         .reset_index()
         .rename(columns={
@@ -1171,7 +1334,7 @@ def get_report():
     prepared_df =prepare_features(filtered_df)
     features = aggregate_per_exam(prepared_df)
 
-    risk_exam, risk_major = compute_and_combine_risk_metrics(features, year=tahun_berlaku.str.extract(r"(\d{4})")[0] )
+    risk_exam, risk_major = compute_and_combine_risk_metrics(features, year=tahun_berlaku )
     
     return success_response( 
         data={

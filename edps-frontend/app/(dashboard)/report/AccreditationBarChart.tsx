@@ -1,6 +1,4 @@
-import {
-  BarChart,
-} from "@mui/x-charts/BarChart"
+import { BarChart } from "@mui/x-charts/BarChart"
 
 import {
   Paper,
@@ -18,14 +16,6 @@ interface Props {
 export default function AccreditationBarChart({
   data,
 }: Props) {
-
-  const infokomData = data.filter(
-    (item) => item.LAM === "Infokom"
-  )
-
-  const embaData = data.filter(
-    (item) => item.LAM === "Emba"
-  )
 
   const renderChart = (
     title: string,
@@ -49,32 +39,28 @@ export default function AccreditationBarChart({
       <Box sx={{ width: "100%", height: 500 }}>
         <BarChart
           dataset={chartData}
-
           xAxis={[
             {
               scaleType: "band",
               dataKey: "major",
+              categoryGapRatio: 0.2,
+              barGapRatio: -1, // overlap bars
             },
           ]}
-
           series={[
             {
               dataKey: "total_prodi",
               label: "Prodi",
-              stack: "total",
             },
             {
               dataKey: "total_lpmi",
               label: "LPMI",
-              stack: "total",
             },
             {
               dataKey: "total_assesor",
               label: "Assesor",
-              stack: "total",
             },
           ]}
-
           height={450}
         />
       </Box>
@@ -83,21 +69,12 @@ export default function AccreditationBarChart({
 
   return (
     <Grid container spacing={3} mb={3}>
-
-      <Grid size={{ xs: 12, md: 6 }}>
-        {renderChart(
-          "LAM Infokom",
-          infokomData
-        )}
-      </Grid>
-
-      <Grid size={{ xs: 12, md: 6 }}>
+      <Grid size={{ xs: 12, md: 12 }}>
         {renderChart(
           "LAM Emba",
-          embaData
+          data
         )}
       </Grid>
-
     </Grid>
   )
 }

@@ -30,48 +30,65 @@ import NoPaginationTable, { Column } from "@/app/component/table/NoPaginationTab
 
 const heatmapColor = (value: number) => {
   if (value < 0) return "#e53935";
-
   if (value >= 1) return "#2e7d32";
   if (value >= 0.5) return "#66bb6a";
   if (value > 0) return "#cddc39";
-
-  // Neutral
   return "#9e9e9e";
 };
 
 function DashboardPage() {
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading } = useAuth();
   const [dashboardInfokom, setDashboardInfokom] = useState<DashboardInfokom>();
   const [dashboardEmba, setDashboardEmba] = useState<DashboardEmba>();
-  const [akreditasi, setAkreditasi] = useState<Akreditasi[]>([])
+  const [akreditasi, setAkreditasi] = useState<Akreditasi[]>([]);
   const [lembaga, setLembaga] = useState<Lembaga[]>([]);
   const [prodi, setProdi] = useState<GetProdi[]>([]);
   const [selectedProdi, setSelectedProdi] = useState<string | undefined>();
   const [selectedLembaga, setSelectedLembaga] = useState<number | undefined>();
   const [selectedAkreditasi, setSelectedAkreditasi] = useState<string | undefined>();
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const [getProdi] = useLazyGetProdiQuery();
   const [getDashboardInfokom] = useLazyGetDashboardInfokomDetailQuery();
   const [getDashboardEmba] = useLazyGetDashboardEmbaDetailQuery();
   const { data: lembagaData } = useGetLembagaQuery(selectedProdi);
   const { data: akreditasiData } = useGetAkreditasiDropdownQuery({ id_prodi: selectedProdi, id_lembaga: selectedLembaga });
   const dashboardData = dashboardInfokom || dashboardEmba;
-  const radarLabels =
-    dashboardData?.radar?.labels ?? [];
 
-  const radarProdi =
-    dashboardData?.radar?.datasets?.prodi ?? [];
+  // Safe data extraction with validation
+  const radarLabels = dashboardData?.radar?.labels ?? [];
+  const radarDatasets = dashboardData?.radar?.datasets;
+  const radarProdi = radarDatasets?.prodi ?? [];
+  const radarLpmi = radarDatasets?.lpmi ?? [];
+  const radarAssesor = radarDatasets?.assesor ?? [];
 
-  const radarLpmi =
-    dashboardData?.radar?.datasets?.lpmi ?? [];
-
-  const radarAssesor =
-    dashboardData?.radar?.datasets?.assesor ?? [];
-
-  const isRadarValid =
+  const isRadarValid = 
     radarLabels.length >= 2 &&
     radarProdi.length === radarLabels.length &&
     radarLpmi.length === radarLabels.length &&
-    radarAssesor.length === radarLabels.length;
+    radarAssesor.length === radarLabels.length &&
+    radarProdi.every(v => typeof v === 'number' && !isNaN(v)) &&
+    radarLpmi.every(v => typeof v === 'number' && !isNaN(v)) &&
+    radarAssesor.every(v => typeof v === 'number' && !isNaN(v));
+
+  // Bar chart data validation
+  const barLabels = dashboardData?.bar?.labels ?? [];
+  const barDatasets = dashboardData?.bar?.datasets;
+  const barProdi = barDatasets?.prodi ?? [];
+  const barLpmi = barDatasets?.lpmi ?? [];
+  const barAssesor = barDatasets?.assesor ?? [];
+
+  const isBarValid = 
+    barLabels.length > 0 &&
+    barProdi.length === barLabels.length &&
+    barLpmi.length === barLabels.length &&
+    barAssesor.length === barLabels.length &&
+    barProdi.every(v => typeof v === 'number' && !isNaN(v)) &&
+    barLpmi.every(v => typeof v === 'number' && !isNaN(v)) &&
+    barAssesor.every(v => typeof v === 'number' && !isNaN(v));
+
+  // Gap heatmap validation
+  const gapHeatmap = dashboardData?.gap_heatmap;
+  const isValidGapData = Array.isArray(gapHeatmap) && gapHeatmap.length > 0;
 
   useEffect(() => {
     if (lembagaData?.data) {
@@ -87,7 +104,6 @@ function DashboardPage() {
   useEffect(() => {
     if (akreditasiData?.data) {
       setAkreditasi(akreditasiData.data);
-
       if (akreditasiData.data.length > 0) {
         setSelectedAkreditasi(akreditasiData.data[0].id_akreditasi);
       } else {
@@ -101,7 +117,6 @@ function DashboardPage() {
       getProdi().then((res) => {
         if (res.data?.data) {
           setProdi(res.data.data);
-
           if (res.data.data.length > 0) {
             setSelectedProdi(res.data.data[0].id_prodi);
           }
@@ -110,34 +125,39 @@ function DashboardPage() {
     } else {
       setSelectedProdi(user?.id_prodi);
     }
-  }, [user]);
+  }, [user, getProdi]);
 
   useEffect(() => {
     if (!selectedAkreditasi) return;
 
     const fetchDashboard = async () => {
+      setIsDashboardLoading(true);
       try {
-
         if (selectedLembaga === 1) {
           const res = await getDashboardInfokom(selectedAkreditasi).unwrap();
           setDashboardInfokom(res.data);
-        } else {
+          setDashboardEmba(undefined);
+        } else if (selectedLembaga === 2) {
           const res = await getDashboardEmba(selectedAkreditasi).unwrap();
           setDashboardEmba(res.data);
+          setDashboardInfokom(undefined);
         }
       } catch (err) {
         console.error("Failed to fetch dashboard:", err);
+        setDashboardInfokom(undefined);
+        setDashboardEmba(undefined);
+      } finally {
+        setIsDashboardLoading(false);
       }
     };
 
     fetchDashboard();
-  }, [selectedAkreditasi, selectedLembaga]);
+  }, [selectedAkreditasi, selectedLembaga, getDashboardInfokom, getDashboardEmba]);
 
   useEffect(() => {
     setDashboardInfokom(undefined);
     setDashboardEmba(undefined);
   }, [selectedAkreditasi, selectedLembaga, selectedProdi]);
-
 
   const columns: Column<TableItem>[] = [
     {
@@ -165,7 +185,7 @@ function DashboardPage() {
     },
     {
       id: 'assesor',
-      label: 'Assesor',
+      label: 'Assessor',
       align: 'center',
       render: (row) =>
         row.assesor === 0
@@ -222,11 +242,10 @@ function DashboardPage() {
       align: 'center',
       render: (row) => {
         const max = row.weight || 1;
-        const assesorPercent = (row.assesor / max) * 100;
-
+        const assessorPercent = (row.assesor / max) * 100;
         return (
           <Box>
-            <LinearProgress variant="determinate" value={assesorPercent} />
+            <LinearProgress variant="determinate" value={assessorPercent} />
           </Box>
         );
       },
@@ -270,7 +289,7 @@ function DashboardPage() {
     },
     {
       id: 'assesor',
-      label: 'Assesor',
+      label: 'Assessor',
       align: 'center',
       render: (row) =>
         row.total_assesor === null || row.total_assesor == undefined
@@ -283,7 +302,6 @@ function DashboardPage() {
       align: 'center',
       render: (row) => {
         const isPass = row.mandatory_pass;
-
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
             {row.total_assesor === null || row.total_lpmi == null
@@ -328,9 +346,7 @@ function DashboardPage() {
 
         return (
           row.total_lpmi == null || row.total_assesor == null ? (
-            <Typography>
-              -
-            </Typography>
+            <Typography>-</Typography>
           ) : (
             <Box
               sx={{
@@ -341,9 +357,7 @@ function DashboardPage() {
               }}
             >
               {icon}
-              <Typography>
-                {label}
-              </Typography>
+              <Typography>{label}</Typography>
             </Box>
           )
         );
@@ -355,11 +369,10 @@ function DashboardPage() {
       align: 'center',
       render: (row) => {
         const max = row.max_weight || 1;
-        const assesorPercent = (row.total_assesor / max) * 100;
-
+        const assessorPercent = (row.total_assesor / max) * 100;
         return (
           <Box>
-            <LinearProgress variant="determinate" value={assesorPercent} />
+            <LinearProgress variant="determinate" value={assessorPercent} />
           </Box>
         );
       },
@@ -376,7 +389,6 @@ function DashboardPage() {
     },
   ];
 
-
   if (authLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -388,7 +400,6 @@ function DashboardPage() {
   return (
     <>
       <Grid container alignItems="center" spacing={2} justifyContent="space-between" mb={3}>
-
         <Grid size={3}>
           <Typography
             variant="h4"
@@ -403,7 +414,6 @@ function DashboardPage() {
 
         <Grid size={9}>
           <Grid container spacing={2} justifyContent="flex-end">
-
             {user?.role !== "PRODI" && (
               <Grid size={3}>
                 <FormControl fullWidth>
@@ -429,7 +439,7 @@ function DashboardPage() {
                 <Select
                   value={selectedLembaga || ""}
                   label="Lembaga"
-                  onChange={(e) => setSelectedLembaga(e.target.value)}
+                  onChange={(e) => setSelectedLembaga(e.target.value as number)}
                 >
                   {lembaga.map((l) => (
                     <MenuItem key={l.id_lembaga} value={l.id_lembaga}>
@@ -456,20 +466,17 @@ function DashboardPage() {
                 </Select>
               </FormControl>
             </Grid>
-
           </Grid>
         </Grid>
       </Grid>
 
-      <Stack
-        direction="column"
-        spacing={2}
-        sx={{ width: "100%", mb: 4 }}
-      >
-        {/* Check if any dashboard data is available */}
-        {(!dashboardInfokom && !dashboardEmba) ? (
+      <Stack direction="column" spacing={2} sx={{ width: "100%", mb: 4 }}>
+        {isDashboardLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+            <CircularProgress />
+          </Box>
+        ) : (!dashboardInfokom && !dashboardEmba) ? (
           <Grid container spacing={2}>
-
             {/* RADAR EMPTY */}
             <Grid size={4.5}>
               <Box
@@ -484,7 +491,6 @@ function DashboardPage() {
                 <Typography variant="h6" fontWeight={700} mb={2}>
                   Assessment Radar
                 </Typography>
-
                 <Box
                   sx={{
                     height: 300,
@@ -498,7 +504,6 @@ function DashboardPage() {
                   <Typography variant="body1" fontWeight={600}>
                     No Radar Data
                   </Typography>
-
                   <Typography variant="body2">
                     Select accreditation data first
                   </Typography>
@@ -520,7 +525,6 @@ function DashboardPage() {
                 <Typography variant="h6" fontWeight={700} mb={2}>
                   Gap Heatmap
                 </Typography>
-
                 <Box
                   sx={{
                     height: 300,
@@ -534,7 +538,6 @@ function DashboardPage() {
                   <Typography variant="body1" fontWeight={600}>
                     No Gap Analysis
                   </Typography>
-
                   <Typography variant="body2">
                     Heatmap data unavailable
                   </Typography>
@@ -556,7 +559,6 @@ function DashboardPage() {
                 <Typography variant="h6" fontWeight={700} mb={2}>
                   Performance Trend
                 </Typography>
-
                 <Box
                   sx={{
                     height: 300,
@@ -570,49 +572,16 @@ function DashboardPage() {
                   <Typography variant="body1" fontWeight={600}>
                     No Performance Data
                   </Typography>
-
                   <Typography variant="body2">
                     Historical trend unavailable
                   </Typography>
                 </Box>
               </Box>
             </Grid>
-
           </Grid>
         ) : (
-          // <Grid container justifyContent='space-between'>
-          //   <Grid size={5.8} sx={{ backgroundColor: "#f5f5f5", p: 2, }}>
-          //     <RadarChart
-          //       height={300}
-          //       series={[
-          //         { label: 'Prodi', data: dashboardInfokom?.radar?.datasets?.prodi || dashboardEmba?.radar?.datasets?.prodi || [], fillArea: true, },
-          //         { label: 'LPMI', data: dashboardInfokom?.radar?.datasets?.lpmi || dashboardEmba?.radar?.datasets?.lpmi || [], fillArea: true, },
-          //         { label: 'Assesor', data: dashboardInfokom?.radar?.datasets?.assesor || dashboardEmba?.radar?.datasets?.assesor || [], fillArea: true, },
-          //       ]}
-          //       radar={{
-          //         max: 100,
-          //         metrics: dashboardInfokom?.radar?.labels || dashboardEmba?.radar?.labels || []
-          //       }}
-          //     />
-          //   </Grid>
-          //   <Grid size={5.8} sx={{ backgroundColor: "#f5f5f5", p: 2, }}>
-          //     <BarChart
-          //       height={300}
-          //       xAxis={[{
-          //         scaleType: "band",
-          //         data: dashboardInfokom?.bar?.labels || dashboardEmba?.bar?.labels || [],
-          //       }]}
-          //       series={[
-          //         { label: 'Prodi', data: dashboardInfokom?.bar?.datasets?.prodi || dashboardEmba?.bar?.datasets?.prodi || [], barLabel: 'value' },
-          //         { label: 'LPMI', data: dashboardInfokom?.bar?.datasets?.lpmi || dashboardEmba?.bar?.datasets?.lpmi || [], barLabel: 'value' },
-          //         { label: 'Assesor', data: dashboardInfokom?.bar?.datasets?.assesor || dashboardEmba?.bar?.datasets?.assesor || [], barLabel: 'value' },
-          //       ]}
-          //     />
-          //   </Grid>
-          // </Grid>
           <Grid container spacing={2}>
-
-            {/* RADAR */}
+            {/* RADAR CHART */}
             <Grid size={4.5}>
               <Box
                 sx={{
@@ -626,7 +595,6 @@ function DashboardPage() {
                 <Typography variant="h6" fontWeight={700} mb={2}>
                   Assessment Radar
                 </Typography>
-
                 {isRadarValid ? (
                   <RadarChart
                     key={selectedAkreditasi}
@@ -643,7 +611,7 @@ function DashboardPage() {
                         fillArea: true,
                       },
                       {
-                        label: "Assesor",
+                        label: "Assessor",
                         data: radarAssesor,
                         fillArea: true,
                       },
@@ -667,9 +635,8 @@ function DashboardPage() {
                     <Typography variant="body1" fontWeight={600}>
                       Not Enough Radar Data
                     </Typography>
-
                     <Typography variant="body2">
-                      Radar chart requires at least 2 criteria
+                      Radar chart requires at least 2 criteria with valid data
                     </Typography>
                   </Box>
                 )}
@@ -690,70 +657,86 @@ function DashboardPage() {
                 <Typography variant="h6" fontWeight={700} mb={2}>
                   Gap Heatmap
                 </Typography>
-
-                <Stack spacing={1}>
-                  {(dashboardData as any)?.gap_heatmap?.map((item: any) => (
-                    <Grid container key={item.criteria}>
+                {isValidGapData ? (
+                  <>
+                    <Stack spacing={1}>
+                      {gapHeatmap.map((item: any, index: number) => (
+                        <Grid container key={item.criteria || index}>
+                          <Grid size={4}>
+                            <Box
+                              sx={{
+                                p: 1,
+                                border: "1px solid #eee",
+                                fontSize: 14,
+                              }}
+                            >
+                              {item.criteria || '-'}
+                            </Box>
+                          </Grid>
+                          <Grid size={4}>
+                            <Box
+                              sx={{
+                                p: 1,
+                                color: "#fff",
+                                textAlign: "center",
+                                background: heatmapColor(item.prodi_vs_lpmi ?? 0),
+                                fontWeight: 700,
+                              }}
+                            >
+                              {item.prodi_vs_lpmi > 0 ? "+" : ""}
+                              {item.prodi_vs_lpmi ?? 0}
+                            </Box>
+                          </Grid>
+                          <Grid size={4}>
+                            <Box
+                              sx={{
+                                p: 1,
+                                color: "#fff",
+                                textAlign: "center",
+                                background: heatmapColor(item.lpmi_vs_assesor ?? 0),
+                                fontWeight: 700,
+                              }}
+                            >
+                              {item.lpmi_vs_assesor > 0 ? "+" : ""}
+                              {item.lpmi_vs_assesor ?? 0}
+                            </Box>
+                          </Grid>
+                        </Grid>
+                      ))}
+                    </Stack>
+                    <Grid container mt={2}>
+                      <Grid size={4}></Grid>
                       <Grid size={4}>
-                        <Box
-                          sx={{
-                            p: 1,
-                            border: "1px solid #eee",
-                            fontSize: 14,
-                          }}
-                        >
-                          {item.criteria}
-                        </Box>
+                        <Typography textAlign="center" fontSize={12}>
+                          Prodi vs LPMI
+                        </Typography>
                       </Grid>
-
                       <Grid size={4}>
-                        <Box
-                          sx={{
-                            p: 1,
-                            color: "#fff",
-                            textAlign: "center",
-                            background: heatmapColor(item.prodi_vs_lpmi),
-                            fontWeight: 700,
-                          }}
-                        >
-                          {item.prodi_vs_lpmi > 0 ? "+" : ""}
-                          {item.prodi_vs_lpmi}
-                        </Box>
-                      </Grid>
-
-                      <Grid size={4}>
-                        <Box
-                          sx={{
-                            p: 1,
-                            color: "#fff",
-                            textAlign: "center",
-                            background: heatmapColor(item.lpmi_vs_assesor),
-                            fontWeight: 700,
-                          }}
-                        >
-                          {item.lpmi_vs_assesor > 0 ? "+" : ""}
-                          {item.lpmi_vs_assesor}
-                        </Box>
+                        <Typography textAlign="center" fontSize={12}>
+                          LPMI vs Assessor
+                        </Typography>
                       </Grid>
                     </Grid>
-                  ))}
-                </Stack>
-
-                <Grid container mt={2}>
-                  <Grid size={4}></Grid>
-
-                  <Grid size={4}>
-                    <Typography textAlign="center" fontSize={12}>
-                      Prodi vs LPMI
+                  </>
+                ) : (
+                  <Box
+                    sx={{
+                      height: 300,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexDirection: "column",
+                      color: "text.secondary",
+                    }}
+                  >
+                    <Typography variant="body1" fontWeight={600}>
+                      No Gap Data Available
                     </Typography>
-                  </Grid>
-
-                  <Grid size={4}>
-                    <Typography textAlign="center" fontSize={12}>
-                      LPMI vs Assesor
+                    <Typography variant="body2">
+                      Heatmap data unavailable for this selection
                     </Typography>
-                  </Grid>
-                </Grid>
+                  </Box>
+                )}
               </Box>
             </Grid>
 
@@ -771,38 +754,55 @@ function DashboardPage() {
                 <Typography variant="h6" fontWeight={700} mb={2}>
                   Performance Trend
                 </Typography>
-
-                <BarChart
-                  height={300}
-                  xAxis={[
-                    {
-                      scaleType: "band",
-                      data: dashboardData?.bar?.labels || [],
-                    },
-                  ]}
-                  series={[
-                    {
-                      label: 'Prodi',
-                      data: dashboardData?.bar?.datasets?.prodi || [],
-                    },
-                    {
-                      label: 'LPMI',
-                      data: dashboardData?.bar?.datasets?.lpmi || [],
-                    },
-                    {
-                      label: 'Assesor',
-                      data: dashboardData?.bar?.datasets?.assesor || [],
-                    },
-                  ]}
-                />
+                {isBarValid ? (
+                  <BarChart
+                    height={300}
+                    xAxis={[
+                      {
+                        scaleType: "band",
+                        data: barLabels,
+                      },
+                    ]}
+                    series={[
+                      {
+                        label: 'Prodi',
+                        data: barProdi,
+                      },
+                      {
+                        label: 'LPMI',
+                        data: barLpmi,
+                      },
+                      {
+                        label: 'Assessor',
+                        data: barAssesor,
+                      },
+                    ]}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      height: 300,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexDirection: "column",
+                      color: "text.secondary",
+                    }}
+                  >
+                    <Typography variant="body1" fontWeight={600}>
+                      Insufficient Bar Chart Data
+                    </Typography>
+                    <Typography variant="body2">
+                      Complete trend data unavailable
+                    </Typography>
+                  </Box>
+                )}
               </Box>
             </Grid>
-
           </Grid>
         )}
 
         <Grid container spacing={2} mt={1}>
-
           <Grid size={3}>
             <Box
               sx={{
@@ -812,15 +812,10 @@ function DashboardPage() {
                 p: 3,
               }}
             >
-              <Typography variant="body2">
-                Overall Consistency
-              </Typography>
-
+              <Typography variant="body2">Overall Consistency</Typography>
               <Typography variant="h4" fontWeight={700}>
                 {dashboardData?.consistency != null
-                  ? `${Number(
-                    dashboardData.consistency
-                  ).toFixed(2)}%`
+                  ? `${Number(dashboardData.consistency).toFixed(2)}%`
                   : "-"}
               </Typography>
             </Box>
@@ -835,12 +830,11 @@ function DashboardPage() {
                 p: 3,
               }}
             >
-              <Typography variant="body2">
-                Critical Gap
-              </Typography>
-
+              <Typography variant="body2">Critical Gap</Typography>
               <Typography variant="h4" fontWeight={700}>
-                -1.25
+                {dashboardData?.max_gap != null
+                  ? Number(dashboardData.max_gap.value).toFixed(2)
+                  : "-"}
               </Typography>
             </Box>
           </Grid>
@@ -854,15 +848,10 @@ function DashboardPage() {
                 p: 3,
               }}
             >
-              <Typography variant="body2">
-                Prediction Score
-              </Typography>
-
+              <Typography variant="body2">Prediction Score</Typography>
               <Typography variant="h4" fontWeight={700}>
                 {(dashboardData as any)?.prediction?.predicted_score != null
-                  ? Number(
-                    (dashboardData as any).prediction.predicted_score
-                  ).toFixed(3)
+                  ? Number((dashboardData as any).prediction.predicted_score).toFixed(3)
                   : "-"}
               </Typography>
             </Box>
@@ -877,19 +866,15 @@ function DashboardPage() {
                 p: 3,
               }}
             >
-              <Typography variant="body2">
-                Risk Level
-              </Typography>
-
+              <Typography variant="body2">Risk Level</Typography>
               <Typography variant="h4" fontWeight={700}>
-                Low
+                {dashboardData?.risk_major?.risk_level_combined || "-"}
               </Typography>
             </Box>
           </Grid>
-
         </Grid>
 
-        {selectedLembaga == 1 &&
+        {selectedLembaga === 1 && dashboardInfokom && (
           <>
             <Typography
               variant="h5"
@@ -901,15 +886,15 @@ function DashboardPage() {
             >
               Average Score by Weight
             </Typography>
-
             <NoPaginationTable
               columns={columns}
-              rows={dashboardInfokom?.table || []}
+              rows={dashboardInfokom.table || []}
               enableGrouping={true}
             />
           </>
-        }
-        {selectedLembaga == 2 &&
+        )}
+        
+        {selectedLembaga === 2 && dashboardEmba && (
           <>
             <Typography
               variant="h5"
@@ -921,17 +906,16 @@ function DashboardPage() {
             >
               Average Score by Criteria
             </Typography>
-
             <NoPaginationTable
               columns={criteriaColumn}
-              rows={dashboardEmba?.table || []}
+              rows={dashboardEmba.table || []}
               showRowNumber={true}
             />
           </>
-        }
+        )}
       </Stack>
     </>
   );
-};
+}
 
 export default DashboardPage;
