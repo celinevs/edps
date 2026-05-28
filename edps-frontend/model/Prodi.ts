@@ -6,3 +6,8 @@ export interface GetProdi {
   fakultas: string;
   kode_prodi: string;
 }
+
+export interface Fakultas {
+  id_fakultas: string;
+  nama_fakultas: string;
+}

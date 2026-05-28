@@ -40,7 +40,7 @@ export async function downloadFile(id_file: string) {
 
 export async function downloadCSV(id_qs: string) {
   try {
-    const response = await fetch(`${API_BASE_URL}/jawaban-user/download-csv/${id_qs}`, {
+    const response = await fetch(`${API_BASE_URL}/pertanyaan/download-csv/${id_qs}`, {
       method: "GET",
       credentials: "include", 
       cache: "no-store",

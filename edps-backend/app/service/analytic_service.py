@@ -73,6 +73,7 @@ def fetch_data_from_db(filtered=None, id_prodi=None, year=None, current_year=Non
             .filter(
                 *common_filters,
                 LamInfokom.bobot.isnot(None),
+                Akreditasi.status == 'Reviewed'
             )
         )
 
@@ -354,7 +355,7 @@ def compute_and_combine_risk_metrics(df, year=None):
         (1 - df["score_assessor_w"]) * 0.45 +
         df["gap_lpmi_assessor"] * 0.20 +
         (1 - df["agree_lpmi_assessor"]) * 0.15 +
-        df["assessor_override_rate"] * 0.10 +
+        # df["assessor_override_rate"] * 0.10 +
         df["trend_penalty"] * 0.10
     )
 

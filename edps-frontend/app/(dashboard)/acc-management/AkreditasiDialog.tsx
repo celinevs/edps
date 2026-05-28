@@ -136,7 +136,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                         tanggal_mulai: data.tanggal_mulai,
                         tanggal_selesai_prodi: data.tanggal_selesai_prodi,
                         tanggal_selesai_lpmi: data.tanggal_selesai_lpmi,
-                        tahun_berlaku: `${data.tahun_mulai}/${data.tahun_mulai + 1}`,
+                        tahun_berlaku: `${data.tahun_mulai}/${Number(data.tahun_mulai) + 1}`,
                         id_qs: data.id_qs,
                         nama_akreditasi: data.nama_akreditasi,
                         id_prodi: data.id_prodi
@@ -144,7 +144,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                 }).unwrap();
                 setSnackbar({
                     open: true,
-                    message: 'Akreditasi berhasil diupdate!',
+                    message: 'Accreditation updated successfully!',
                     severity: 'success'
                 });
             }
@@ -153,14 +153,14 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                     tanggal_mulai: data.tanggal_mulai,
                     tanggal_selesai_prodi: data.tanggal_selesai_prodi,
                     tanggal_selesai_lpmi: data.tanggal_selesai_lpmi,
-                    tahun_berlaku: `${data.tahun_mulai}/${data.tahun_mulai + 1}`,
+                    tahun_berlaku: `${data.tahun_mulai}/${Number(data.tahun_mulai) + 1}`,
                     id_qs: data.id_qs,
                     nama_akreditasi: data.nama_akreditasi,
                     id_prodi: data.id_prodi
                 }).unwrap();
                 setSnackbar({
                     open: true,
-                    message: 'Akreditasi berhasil dibuat!',
+                    message: 'Accreditation created successfully!',
                     severity: 'success'
                 });
             }
@@ -171,7 +171,8 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
 
             setSnackbar({
                 open: true,
-                message: 'Gagal membuat Akreditasi',
+                message: error?.data?.message ||
+                'Failed to create accreditation',
                 severity: 'error'
             });
         }
@@ -183,6 +184,8 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
             <Dialog
                 open={open}
                 onClose={onClose}
+                maxWidth="sm"
+                fullWidth
             >
                 <form onSubmit={handleSubmit(onFormSubmit)}>
                     <DialogTitle>{accData ? 'Edit Accreditation' : 'Create new Accreditation'}</DialogTitle>

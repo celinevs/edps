@@ -15,7 +15,8 @@ import {
     Stack,
     Box,
     Grid,
-    MenuItem
+    MenuItem,
+    CircularProgress
 } from "@mui/material";
 import DataTable, { Column } from "@/app/component/table/DataTable";
 import { useAuth } from "@/app/service/hooks/useAuth";
@@ -33,7 +34,7 @@ export type AkreditasiFilter = z.infer<typeof AkreditasiParamSchema>
 
 function EventPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const [totalData, setTotalData] = useState(0)
     const [page, setPage] = useState(0)
     const [perPage, setPerPage] = useState(5)
@@ -105,7 +106,7 @@ function EventPage() {
         if (tahunData?.data) {
             setTahun(tahunData.data)
         }
-    })
+    }, [tahunData]) // Added tahunData as dependency
 
     const handleView = (row: Akreditasi) => {
         sessionStorage.setItem('formData', JSON.stringify({
@@ -295,7 +296,6 @@ function EventPage() {
         },
     ];
 
-
     const handleChangePage = (_: unknown, newPage: number) => {
         setPage(newPage);
     };
@@ -304,6 +304,21 @@ function EventPage() {
         setPerPage(+event.target.value);
         setPage(0);
     };
+
+    if (authLoading) {
+        return (
+            <Box 
+                sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    minHeight: '100vh' 
+                }}
+            >
+                <CircularProgress />
+            </Box>
+        );
+    }
 
     return (
         <>
@@ -376,7 +391,6 @@ function EventPage() {
                 spacing={2}
                 sx={{ width: "100%", mb: 4 }}
             >
-
                 <DataTable
                     columns={columns}
                     rows={akreditasi}

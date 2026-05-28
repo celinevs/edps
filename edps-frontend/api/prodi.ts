@@ -1,6 +1,7 @@
 import { baseApi } from "@/app/service/baseApi";
 import { APIResponse } from "@/model/Common";
 import { GetProdi } from "@/model/Prodi";
+import { Fakultas } from "@/model/Prodi";
 
 export const addTagTypes = ['prodi'];
 
@@ -14,10 +15,16 @@ export const prodiApi = baseApi
                 query: () => `/prodi`,
                 providesTags: ["prodi"],
             }),
+            getFakultas: builder.query<APIResponse<Fakultas[]>, void>({
+                query: () => `/fakultas`,
+                providesTags: ["prodi"],
+            }),
         }),
     });
 
 export const {
     useGetProdiQuery,
-    useLazyGetProdiQuery
+    useLazyGetProdiQuery,
+    useGetFakultasQuery,
+    useLazyGetFakultasQuery
 } = prodiApi;

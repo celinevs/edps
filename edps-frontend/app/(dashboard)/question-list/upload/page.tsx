@@ -16,7 +16,8 @@ import {
     Paper,
     Grid,
     Snackbar,
-    Alert
+    Alert,
+    Link
 } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DropdownInputController from '@/app/component/controller/DropdownInputController';
@@ -49,9 +50,15 @@ export const UploadCSVSchema = z.object({
     question_set: z.string().min(1),
     tahun_mulai: z.string().min(1),
     tahun_akhir: z.string().min(1),
-    label_link: z.string().min(1),
-    link: z.string().min(1).url("Invalid URL format"),
-    deskripsi_gambar: z.string().min(1),
+    label_link: z.string().optional(),
+    link: z
+        .string()
+        .optional()
+        .refine(
+            (val) => !val || /^https?:\/\/.+/.test(val),
+            "Invalid URL format"
+        ),
+    deskripsi_gambar: z.string().optional(),
 })
     .superRefine((data, ctx) => {
         if (!data.file && !data.existingFile) {
@@ -59,13 +66,6 @@ export const UploadCSVSchema = z.object({
                 code: z.ZodIssueCode.custom,
                 path: ["file"],
                 message: "File is required",
-            });
-        }
-        if (!data.gambar && !data.existingGambar) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                path: ["gambar"],
-                message: "Image is required",
             });
         }
     });
@@ -190,7 +190,6 @@ function UploadQuestionPage() {
 
     const onSubmit = async (data: UploadCSVRequest) => {
         if (!data.file && !data.existingFile) return;
-        if (!data.gambar && !data.existingGambar) return;
 
         const formData = new FormData();
         if (data.file) {
@@ -204,9 +203,18 @@ function UploadQuestionPage() {
         formData.append("question_set", data.question_set);
         formData.append("tahun_mulai", data.tahun_mulai);
         formData.append("tahun_akhir", data.tahun_akhir);
-        formData.append("label_link", data.label_link);
-        formData.append("link", data.link);
-        formData.append("deskripsi_gambar", data.deskripsi_gambar);
+
+        if (data.label_link) {
+            formData.append("label_link", data.label_link);
+        }
+
+        if (data.link) {
+            formData.append("link", data.link);
+        }
+
+        if (data.deskripsi_gambar) {
+            formData.append("deskripsi_gambar", data.deskripsi_gambar);
+        }
 
         try {
             if (id_qs) {
@@ -363,7 +371,7 @@ function UploadQuestionPage() {
             {/* Label Link */}
             <Grid container mb={3}>
                 <Grid size={2}>
-                    <Typography fontWeight="bold">Label Link*:</Typography>
+                    <Typography fontWeight="bold">Label Link:</Typography>
                 </Grid>
                 <Grid size={5}>
                     <TextInputController
@@ -384,7 +392,7 @@ function UploadQuestionPage() {
             {/* Link URL */}
             <Grid container mb={3}>
                 <Grid size={2}>
-                    <Typography fontWeight="bold">Link URL*:</Typography>
+                    <Typography fontWeight="bold">Link URL:</Typography>
                 </Grid>
                 <Grid size={5}>
                     <TextInputController
@@ -405,7 +413,7 @@ function UploadQuestionPage() {
             {/* Image */}
             <Grid container mb={3}>
                 <Grid size={2}>
-                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Image*:</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Image:</Typography>
                 </Grid>
                 <Grid size={5}>
                     <Paper
@@ -482,7 +490,7 @@ function UploadQuestionPage() {
             {/* Image Description */}
             <Grid container mb={3}>
                 <Grid size={2}>
-                    <Typography fontWeight="bold">Image Description*:</Typography>
+                    <Typography fontWeight="bold">Image Description:</Typography>
                 </Grid>
                 <Grid size={5}>
                     <TextInputController
@@ -596,6 +604,26 @@ function UploadQuestionPage() {
                                 </Button>
                             </>
                         )}
+                        <Typography
+                            variant="caption"
+                            sx={{
+                                display: "block",
+                                mt: 2,
+                                color: "text.secondary",
+                                textAlign: "left",
+                            }}
+                        >
+                            Supported format: CSV only.
+                            <br />
+                            Template can be accessed{" "}
+                            <Link
+                                href="https://docs.google.com/spreadsheets/d/191qnEhTKPaVNZyIXjvrTRDj9Gqtk5IkZVwRnRn7Vah8/edit?usp=sharing"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                here
+                            </Link>
+                        </Typography>
                         {formState.errors.file && (
                             <Typography color="error" variant="body2">
                                 {formState.errors.file.message}

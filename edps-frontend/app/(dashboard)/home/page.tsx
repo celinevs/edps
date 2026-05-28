@@ -9,8 +9,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Akreditasi, Summary } from "@/model/Akreditasi";
 import { Lembaga } from "@/model/Lembaga";
+import { GetProdi } from "@/model/Prodi";
 import { AkreditasiParamSchema, AkreditasiFilter } from "../event/page";
 import { useGetAkreditasiQuery, useGetTahunBerlakuQuery } from "@/api/akreditasi";
+import { useGetProdiQuery } from '@/api/prodi';
 import { useGetLembagaQuery } from "@/api/lembaga";
 import DropdownInputController from "@/app/component/controller/DropdownInputController";
 import DataTable, { Column } from "@/app/component/table/DataTable";
@@ -31,8 +33,10 @@ function HomePage() {
     const [summary, setSummary] = useState<Summary>()
     const [lembaga, setLembaga] = useState<Lembaga[]>([]);
     const [tahun, setTahun] = useState<string[]>([]);
+    const [prodi, setProdi] = useState<GetProdi[]>([]);
     const isAdmin = user?.role === 'ADMIN';
     const isUPPS = user?.role === 'UPPS' || user?.role === 'SUPERADMIN';
+    const { data: prodiData } = useGetProdiQuery();
     const { data: tahunData } = useGetTahunBerlakuQuery({ id_prodi: user?.id_prodi || undefined });
     const { data: lembagaData } = useGetLembagaQuery(undefined);
 
@@ -99,6 +103,12 @@ function HomePage() {
         }
     })
 
+    useEffect(() => {
+        if (prodiData?.data) {
+            setProdi(prodiData.data)
+        }
+    }, [prodiData])
+
     const handleChangePage = (_: unknown, newPage: number) => {
         setPage(newPage);
     };
@@ -108,18 +118,37 @@ function HomePage() {
         setPage(0);
     };
 
+    const handleView = (row: Akreditasi) => {
+        sessionStorage.setItem('formData', JSON.stringify({
+            id_regulasi: row.question_set.id_qs,
+            id_periode: row.id_akreditasi,
+            status: row.status,
+            nama_periode: row.nama_akreditasi,
+            tanggal_selesai: row.tanggal_selesai,
+            total_max_bobot: row.question_set.total_max_bobot,
+            lembaga: row.question_set.id_lembaga,
+            is_upps: true,
+            closed: true
+        }));
+
+        router.push('/form');
+    };
+
     const handleValidation = (row: Akreditasi) => {
         sessionStorage.setItem('formData', JSON.stringify({
             id_regulasi: row.question_set.id_qs,
-            id_akreditasi: row.id_akreditasi,
+            id_periode: row.id_akreditasi,
             status: row.status,
-            nama_akreditasi: row.nama_akreditasi,
+            nama_periode: row.nama_akreditasi,
             tanggal_selesai: row.tanggal_selesai,
             total_max_bobot: row.question_set.total_max_bobot,
-            is_lpmi: true
+            is_lpmi: true,
+            lembaga: row.question_set.id_lembaga
         }));
+
         router.push('/form');
     };
+
 
     const handleAnalytic = (row: Akreditasi) => {
         sessionStorage.setItem('formData', JSON.stringify({
@@ -216,13 +245,22 @@ function HomePage() {
                         </Button>
                     }
                     {isUPPS &&
-                        <Button
-                            size="small"
-                            variant="contained"
-                            onClick={() => handleAnalytic(row)}
-                        >
-                            View Analytic
-                        </Button>
+                        <>
+                            <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => handleAnalytic(row)}
+                            >
+                                View Analytic
+                            </Button>
+                            <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => handleView(row)}
+                            >
+                                Review Form
+                            </Button>
+                        </>
                     }
                 </Stack>
             ),
@@ -294,6 +332,28 @@ function HomePage() {
                 <Grid container gap={0.5}>
                     <Grid>
                         <DropdownInputController
+                            name="id_prodi"
+                            control={control}
+                            label="Prodi"
+                            size='small'
+                            sx={{
+                                "& .MuiInputBase-root": {
+                                    width: 200
+                                }
+                            }}
+                        >
+                            {prodi.map((category) => (
+                                <MenuItem
+                                    key={String(category.id_prodi)}
+                                    value={String(category.id_prodi)}
+                                >
+                                    {category.nama_prodi}
+                                </MenuItem>
+                            ))}
+                        </DropdownInputController>
+                    </Grid>
+                    <Grid>
+                        <DropdownInputController
                             name="tahun_berlaku"
                             control={control}
                             label="Tahun Berlaku"
@@ -310,25 +370,6 @@ function HomePage() {
                                     value={String(category)}
                                 >
                                     {category}
-                                </MenuItem>
-                            ))}
-                        </DropdownInputController>
-                    </Grid>
-                    <Grid>
-                        <DropdownInputController
-                            name="id_lembaga"
-                            control={control}
-                            label="Lembaga"
-                            size='small'
-                            sx={{
-                                "& .MuiInputBase-root": {
-                                    width: 200
-                                }
-                            }}
-                        >
-                            {lembaga.map((l) => (
-                                <MenuItem key={l.id_lembaga} value={l.id_lembaga}>
-                                    {l.nama_lembaga}
                                 </MenuItem>
                             ))}
                         </DropdownInputController>

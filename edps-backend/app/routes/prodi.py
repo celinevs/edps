@@ -35,6 +35,28 @@ def get_prodi():
 
     except Exception as e:
         return handle_exception(e)
+
+@prodi_bp.route("/fakultas", methods=["GET"])
+@jwt_required()
+def get_fakultas():
+    try:
+        fakultas_list = Fakultas.query.all()
+
+        results = []
+        for fakultas in fakultas_list:
+            
+            results.append({
+                "id_fakultas": fakultas.id_fakultas,
+                "nama_fakultas": fakultas.nama_fakultas,
+            })
+
+        return success_response(
+            data=results,
+            message="Data dropdown prodi berhasil diambil"
+        )
+
+    except Exception as e:
+        return handle_exception(e)
     
 @prodi_bp.route("/faculty", methods=["GET"])
 @jwt_required()

@@ -40,6 +40,7 @@ interface FormData {
     total_max_bobot: number;
     is_lpmi?: boolean;
     is_admin?: boolean;
+    is_upps?: boolean;
     lembaga?: number;
     closed?: boolean;
 }
@@ -48,8 +49,8 @@ function FormPage() {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [formData, setFormData] = useState<FormData | null>(null);
-    const { data: dataPertanyaan } = useGetPertanyaanByRegulasiQuery(formData?.id_regulasi ?? "", { skip: !formData?.id_regulasi });
-    const { data: dataJawaban } = useGetJawabanUserByPeriodeQuery(formData?.id_periode ?? "", { skip: !formData?.id_periode });
+    const { data: dataPertanyaan, isLoading: pertanyaanLoading } = useGetPertanyaanByRegulasiQuery(formData?.id_regulasi ?? "", { skip: !formData?.id_regulasi });
+    const { data: dataJawaban, isLoading: jawabanLoading } = useGetJawabanUserByPeriodeQuery(formData?.id_periode ?? "", { skip: !formData?.id_periode });
     const [uploadFile] = useUploadFileMutation();
     const [deleteFile] = useDeleteFileMutation();
     const [submitJawaban] = useSubmitJawabanMutation();
@@ -162,7 +163,7 @@ function FormPage() {
                 rekomendasi_ak: dataJawaban?.data?.rekomendasi_ak || '',
                 catatan_assesor: dataJawaban?.data?.catatan_assesor || '',
             });
-            const isReviewer = formData?.is_lpmi || formData?.is_admin;
+            const isReviewer = formData?.is_lpmi || formData?.is_admin || formData?.is_upps;
 
             const mapped = dataJawaban?.data?.jawaban.reduce(
                 (acc, curr) => {
@@ -337,7 +338,7 @@ function FormPage() {
         );
     }
 
-    if (pertanyaan.length === 0) {
+    if (pertanyaan.length === 0 || jawabanLoading || pertanyaanLoading) {
         return (
             <Box sx={{ p: 4 }}>
                 <Typography variant="body1" color="text.secondary">
@@ -348,12 +349,12 @@ function FormPage() {
         );
     }
 
-    const isLPMI = formData?.is_lpmi || formData?.is_admin;
+    const isNotProdi = formData?.is_lpmi || formData?.is_admin || formData?.is_upps;
     const status = formData?.status;
     const shouldDisabled =
         status === "Reviewed" ||
         formData?.closed ||
-        (status != 'In Progress' && !isLPMI) ||
+        (status != 'In Progress' && !isNotProdi) ||
         (status != "Submitted" && status != "Validating" && formData?.is_lpmi) ||
         (status != "Validated" && status != "Reviewing" && formData?.is_admin);
     const isRecapPage = formData?.lembaga == 2 && currentPage === pertanyaan.length + 2;
@@ -521,7 +522,7 @@ function FormPage() {
 
                                     <Divider sx={{ mb: 2, borderBottom: '3px solid #ccc' }} />
                                     
-                                    {isLPMI && (
+                                    {isNotProdi && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -530,13 +531,13 @@ function FormPage() {
                                             </Grid>
                                             <Grid size={{ xs: 12, sm: 10 }}>
                                                 <Typography variant="body1">
-                                                    : {getIndicatorScore(q, getAnswer[q.q_no]?.jawaban_prodi)?.score || '-'}
+                                                    : {getAnswer[q.q_no]?.jawaban_prodi == undefined? '-' : getAnswer[q.q_no]?.jawaban_prodi}
                                                 </Typography>
                                             </Grid>
                                         </Grid>
                                     )}
                                     
-                                    {(!formData?.is_lpmi && (["Validated", "Reviewed", "Reviewing"].includes(status || ""))) && (
+                                    {((!formData?.is_lpmi) && (["Validated", "Reviewed", "Reviewing"].includes(status || ""))) || formData?.is_upps && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -545,13 +546,13 @@ function FormPage() {
                                             </Grid>
                                             <Grid size={{ xs: 12, sm: 10 }}>
                                                 <Typography variant="body1">
-                                                    : {getIndicatorScore(q, getAnswer[q.q_no]?.jawaban_lpmi)?.score || '-'}
+                                                    : {getAnswer[q.q_no]?.jawaban_lpmi == undefined? '-' : getAnswer[q.q_no]?.jawaban_lpmi}
                                                 </Typography>
                                             </Grid>
                                         </Grid>
                                     )}
                                     
-                                    {(!formData?.is_admin && (["Reviewed"].includes(status || ""))) && (
+                                    {((!formData?.is_admin || formData?.is_upps) && (["Reviewed"].includes(status || ""))) && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -560,7 +561,7 @@ function FormPage() {
                                             </Grid>
                                             <Grid size={{ xs: 12, sm: 10 }}>
                                                 <Typography variant="body1">
-                                                    : {getIndicatorScore(q, getAnswer[q.q_no]?.jawaban_assesor)?.score || '-'}
+                                                    : {getAnswer[q.q_no]?.jawaban_assesor == undefined? '-' : getAnswer[q.q_no]?.jawaban_assesor}
                                                 </Typography>
                                             </Grid>
                                         </Grid>
@@ -569,7 +570,7 @@ function FormPage() {
                                     <Grid container spacing={2} sx={{ mb: 3 }}>
                                         <Grid size={{ xs: 12, sm: 2 }}>
                                             <Typography variant="subtitle1" fontWeight="bold">
-                                                Answer
+                                                {formData?.is_upps? 'Assessor' : 'Answer'}
                                             </Typography>
                                         </Grid>
                                         <Grid size={{ xs: 12, sm: 10 }}>
@@ -613,7 +614,7 @@ function FormPage() {
                                         </Grid>
                                     </Grid>
                                     
-                                    {(!formData?.is_lpmi && getAnswer[q.q_no]?.note_lpmi) && (
+                                    {((!formData?.is_lpmi || !formData?.is_upps) && getAnswer[q.q_no]?.note_lpmi) && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -639,7 +640,7 @@ function FormPage() {
                                         </Grid>
                                     )}
                                     
-                                    {(!isLPMI && getAnswer[q.q_no]?.note_assesor) && (
+                                    {(!isNotProdi && getAnswer[q.q_no]?.note_assesor) && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -757,6 +758,8 @@ function FormPage() {
                 role={formData?.is_lpmi ? 'lpmi' : formData?.is_admin ? 'assesor' : 'prodi'}
                 dosen={dosenAnswer}
                 recapData={recapData}
+                files={files}
+                lembaga={formData?.lembaga}
             />
 
             <PagePaginationDialog
@@ -766,6 +769,8 @@ function FormPage() {
                 currentPage={currentPage}
                 answers={answers}
                 pertanyaan={pertanyaan}
+                files={files}
+                lembaga={formData?.lembaga}
                 onSelectPage={(page) => {
                     setCurrentPage(page);
                     saveAnswer()

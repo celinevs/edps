@@ -6,6 +6,7 @@ export interface User {
    nama_prodi: string;
    is_active: boolean;
    id_prodi: string;
+   id_fakultas: string;
 }
 
 export enum Roles {

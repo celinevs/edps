@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, redirect, url_for, session
 from app import db
-# from app.models import User
 from app.models.User import User
+from app.models.Prodi import Prodi
 from app.utils.response_handler import success_response, error_response
 from app.utils.decorator import role_required
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -17,6 +17,7 @@ def create_user():
     email = data.get('email')
     role = data.get('role')
     id_prodi = data.get('id_prodi') or None
+    id_fakultas = data.get('id_fakultas') or None
     username = data.get('username')
 
     if not email or not role:
@@ -26,13 +27,19 @@ def create_user():
         return error_response("Prodi are required", 400)
 
     existing_user = User.query.filter_by(email=email).first()
+    existing_prodi = Prodi.query.filter_by(id_prodi=id_prodi).first()
     if existing_user:
         return error_response("Email already used", 409)
+    
+    if existing_prodi:
+        id_fakultas = existing_prodi.id_fakultas
+
 
     new_user = User(
         email=email,
         role=role,
         id_prodi = id_prodi,
+        id_fakultas = id_fakultas,
         username=username,
         is_active=True
     )
@@ -103,10 +110,10 @@ def update_user(id_user):
         email = data.get('email')
         role = data.get('role')
         id_prodi = data.get('id_prodi')
+        id_fakultas = data.get('id_fakultas')
         username = data.get('username')
         is_active = data.get('is_active')
 
-        # Validasi email unik (kalau diubah)
         if email and email != user.email:
             existing_user = User.query.filter_by(email=email).first()
             if existing_user:
@@ -120,11 +127,17 @@ def update_user(id_user):
 
         if role == 'PRODI':
             user.id_prodi = id_prodi
+            existing_prodi = Prodi.query.filter_by(id_prodi=id_prodi).first()
+            user.id_fakultas = existing_prodi.id_fakultas
+            
         elif role and role != 'PRODI':
             user.id_prodi = None
 
         if username is not None:
             user.username = username
+        
+        if id_fakultas is not None and role == 'UPPS':
+            user.id_fakultas = id_fakultas
 
         if is_active is not None:
             user.is_active = is_active

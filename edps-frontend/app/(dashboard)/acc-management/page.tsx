@@ -2,26 +2,44 @@
 
 import { useState, useEffect } from "react";
 import { Akreditasi } from "@/model/Akreditasi";
-import { useGetAkreditasiQuery } from "@/api/akreditasi";
+import { useGetAkreditasiQuery, useDeleteAkreditasiMutation } from "@/api/akreditasi";
 import {
     Typography,
     Button,
     Stack,
     Box,
-    IconButton
+    IconButton,
+    Snackbar,
+    Alert
 } from "@mui/material";
+
 import DataTable, { Column } from "@/app/component/table/DataTable";
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+
 import AkreditasiDialog from "./AkreditasiDialog";
+import DeleteDialog from "@/app/component/DeleteDialog";
 
 function AccManagementPage() {
     const [totalData, setTotalData] = useState(0)
     const [page, setPage] = useState(0)
     const [perPage, setPerPage] = useState(5)
+
     const [akreditasi, setAkreditasi] = useState<Akreditasi[]>([])
+
     const [selectedAkreditasi, setSelectedAkreditasi] = useState<Akreditasi>()
-    const [openDialog, setOpenDialog] = useState<boolean>(false)
+
+    const [openDialog, setOpenDialog] = useState(false)
+    const [openDeleteDialog, setOpenDeleteDialog] = useState(false)
+    const [snackbar, setSnackbar] = useState({
+        open: false,
+        message: '',
+        severity: 'success' as 'success' | 'error'
+    });
+
+    const [deleteAcreditation] = useDeleteAkreditasiMutation();
+
     const { data } = useGetAkreditasiQuery({
         page: page + 1,
         per_page: perPage,
@@ -29,18 +47,44 @@ function AccManagementPage() {
 
     useEffect(() => {
         if (data?.data) {
-            setAkreditasi(data?.data.results)
-            setTotalData(data?.data.totalCount)
+            setAkreditasi(data.data.results)
+            setTotalData(data.data.totalCount)
         }
     }, [data]);
 
     const handleEdit = (data: Akreditasi) => {
-            setSelectedAkreditasi(data)
-            setOpenDialog(true)
+        setSelectedAkreditasi(data)
+        setOpenDialog(true)
+    }
+
+    const handleOpenDelete = (data: Akreditasi) => {
+        setSelectedAkreditasi(data)
+        setOpenDeleteDialog(true)
+    }
+
+    const handleDelete = async (id: string) => {
+        try {
+            await deleteAcreditation(id).unwrap()
+            setSnackbar({
+                open: true,
+                message: 'Accreditation deleted successfully!',
+                severity: 'success'
+            });
+            setOpenDeleteDialog(false)
+        } catch (error: any) {
+            console.error(error)
+            setSnackbar({
+                open: true,
+                message: error?.data?.message ||
+                'Failed to create accreditation',
+                severity: 'error'
+            });
         }
+    }
 
     const columns: Column<Akreditasi>[] = [
         { id: 'nama_akreditasi', label: 'Event Name' },
+
         {
             id: 'status',
             label: 'Status',
@@ -67,43 +111,55 @@ function AccManagementPage() {
                 );
             },
         },
+
         {
             id: 'tanggal_mulai',
             label: 'Start Date',
             render: (row) =>
                 new Date(row.tanggal_mulai).toLocaleDateString("en-GB"),
         },
+
         {
             id: 'tanggal_selesai',
             label: 'End Date Prodi',
             render: (row) =>
                 new Date(row.tanggal_selesai).toLocaleDateString("en-GB"),
         },
+
         {
             id: 'tanggal_selesai_lpmi',
             label: 'End Date LPMI',
             render: (row) =>
                 new Date(row.tanggal_selesai_lpmi).toLocaleDateString("en-GB"),
         },
+
         {
             id: 'actions',
             label: 'Actions',
             render: (row) => (
                 <Stack direction="row" spacing={1}>
-                    <IconButton onClick={() => {handleEdit(row)}}>
+                    <IconButton onClick={() => handleEdit(row)}>
                         <EditIcon />
+                    </IconButton>
+
+                    <IconButton
+                        color="error"
+                        onClick={() => handleOpenDelete(row)}
+                    >
+                        <DeleteIcon />
                     </IconButton>
                 </Stack>
             ),
         },
     ];
 
-
     const handleChangePage = (_: unknown, newPage: number) => {
         setPage(newPage);
     };
 
-    const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleChangeRowsPerPage = (
+        event: React.ChangeEvent<HTMLInputElement>
+    ) => {
         setPerPage(+event.target.value);
         setPage(0);
     };
@@ -114,6 +170,11 @@ function AccManagementPage() {
 
     const handleCloseDialog = () => {
         setOpenDialog(false)
+        setSelectedAkreditasi(undefined)
+    }
+
+    const handleCloseDeleteDialog = () => {
+        setOpenDeleteDialog(false)
         setSelectedAkreditasi(undefined)
     }
 
@@ -136,8 +197,6 @@ function AccManagementPage() {
                 spacing={2}
                 sx={{ width: "100%", mb: 4 }}
             >
-
-
                 <DataTable
                     columns={columns}
                     rows={akreditasi}
@@ -147,6 +206,7 @@ function AccManagementPage() {
                     handleChangePage={handleChangePage}
                     handleChangeRowsPerPage={handleChangeRowsPerPage}
                 />
+
                 <Box
                     sx={{
                         display: 'flex',
@@ -169,15 +229,38 @@ function AccManagementPage() {
                             width: 'auto',
                         }}
                     >
-                        Create New Acreditation Page
+                        Create New Accreditation Page
                     </Button>
                 </Box>
             </Stack>
+
             <AkreditasiDialog
                 open={openDialog}
                 onClose={handleCloseDialog}
                 accData={selectedAkreditasi}
             />
+
+            <DeleteDialog
+                open={openDeleteDialog}
+                onClose={handleCloseDeleteDialog}
+                handleDelete={handleDelete}
+                id={selectedAkreditasi?.id_akreditasi || ""}
+            />
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={3000}
+                onClose={() => setSnackbar({ ...snackbar, open: false })}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            >
+                <Alert
+                    onClose={() => setSnackbar({ ...snackbar, open: false })}
+                    severity={snackbar.severity}
+                    sx={{ width: '100%' }}
+                    variant="filled"
+                >
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </>
     );
 };

@@ -3,8 +3,9 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, Typography, Grid, MenuItem, Snackbar, Alert } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { usePostusersMutation, useUpdateusersMutation } from '@/api/user';
-import { useGetProdiQuery } from '@/api/prodi';
+import { useGetFakultasQuery, useGetProdiQuery } from '@/api/prodi';
 import { GetProdi } from '@/model/Prodi';
+import { Fakultas } from '@/model/Prodi';
 import { User, Roles } from '@/model/User';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,17 +25,26 @@ export const UserRequestSchema = z.object({
     email: z.email("This is not a valid email.").min(1),
     role: z.string().min(1),
     id_prodi: z.string(),
+    id_fakultas: z.string(),
     is_active: z.boolean()
+}).transform((data) => {
+    // Transform "all" back to empty string for API
+    if (data.id_fakultas === 'all') {
+        return { ...data, id_fakultas: '' };
+    }
+    return data;
 });
 
 type UserRequest = z.infer<typeof UserRequestSchema>
 
 function UserDialog(props: UserDialogProps) {
     const { data } = useGetProdiQuery();
+    const { data: fakulData } = useGetFakultasQuery();
     const { open, onClose, userData } = props;
     const [PostUser] = usePostusersMutation();
     const [UpdateUser] = useUpdateusersMutation();
     const [prodi, setProdi] = useState<GetProdi[]>([]);
+    const [fakultas, setFakultas] = useState<Fakultas[]>([]);
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
@@ -47,11 +57,18 @@ function UserDialog(props: UserDialogProps) {
         }
     }, [data])
 
+    useEffect(() => {
+        if (fakulData?.data) {
+            setFakultas(fakulData.data)
+        }
+    }, [fakulData])
+
     const defaultValues: UserRequest = {
         username: '',
         email: '',
         role: '',
         id_prodi: '',
+        id_fakultas: '',
         is_active: true
     }
 
@@ -68,6 +85,7 @@ function UserDialog(props: UserDialogProps) {
                 email: userData.email || '',
                 role: userData.role || '',
                 id_prodi: userData.id_prodi || '',
+                id_fakultas: userData.id_fakultas || 'all',
                 is_active: userData.is_active ?? true
             });
         } else {
@@ -80,6 +98,12 @@ function UserDialog(props: UserDialogProps) {
     useEffect(() => {
         if (role !== 'PRODI') {
             setValue('id_prodi', '');
+        }
+    }, [role, setValue]);
+
+    useEffect(() => {
+        if (role !== 'UPPS' && role !== 'PRODI') {
+            setValue('id_fakultas', '');
         }
     }, [role, setValue]);
 
@@ -163,11 +187,13 @@ function UserDialog(props: UserDialogProps) {
                             control={control}
                             label="Email"
                             placeholder="Masukkan email"
+                            disabled={!!userData}
                         />
                         <DropdownInputController
                             name="role"
                             control={control}
                             label="Role"
+                            showClearButton={false}
                         >
                             {Object.values(Roles).map((role) => (
                                 <MenuItem key={role} value={role}>
@@ -180,6 +206,7 @@ function UserDialog(props: UserDialogProps) {
                                 name="id_prodi"
                                 control={control}
                                 label="Prodi"
+                                showClearButton={false}
                             >
                                 {prodi.map((category) => (
                                     <MenuItem
@@ -187,6 +214,26 @@ function UserDialog(props: UserDialogProps) {
                                         value={String(category.id_prodi)}
                                     >
                                         {category.nama_prodi}
+                                    </MenuItem>
+                                ))}
+                            </DropdownInputController>}
+                        {role === 'UPPS' &&
+                            <DropdownInputController
+                                name="id_fakultas"
+                                control={control}
+                                label="Fakultas"
+                                showClearButton={false}
+                                displayEmpty
+                            >
+                                <MenuItem value="all">
+                                    All
+                                </MenuItem>
+                                {fakultas.map((category) => (
+                                    <MenuItem
+                                        key={String(category.id_fakultas)}
+                                        value={String(category.id_fakultas)}
+                                    >
+                                        {category.nama_fakultas}
                                     </MenuItem>
                                 ))}
                             </DropdownInputController>}

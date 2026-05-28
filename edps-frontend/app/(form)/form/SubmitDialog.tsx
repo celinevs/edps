@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from 'react';
 import CloseIcon from '@mui/icons-material/Close';
 import { useSubmitJawabanMutation, useSubmitValidationMutation, useSubmitReviewMutation } from '@/api/jawaban';
-import { EmbaDosen, EmbaNotes, JawabanRequestItem, ValidationRequestItem} from '@/model/Jawaban';
+import { EmbaDosen, EmbaNotes, JawabanRequestItem, ValidationRequestItem } from '@/model/Jawaban';
 import { Pertanyaan } from '@/model/Pertanyaan';
 
 interface SubmitDialogProps {
@@ -18,11 +18,12 @@ interface SubmitDialogProps {
     dosen?: EmbaDosen;
     role?: 'prodi' | 'lpmi' | 'assesor'
     recapData?: EmbaNotes;
-
+    files?: { [key: number]: any[] };
+    lembaga?: number;
 }
 
 function SubmitDialog(props: SubmitDialogProps) {
-    const { open, onClose, id_periode, jawaban, pertanyaan, role, id_regulasi, dosen, recapData } = props;
+    const { open, onClose, id_periode, jawaban, pertanyaan, role, id_regulasi, dosen, recapData, files, lembaga } = props;
     const [submitJawaban] = useSubmitJawabanMutation();
     const [submitValidation] = useSubmitValidationMutation();
     const [submitReview] = useSubmitReviewMutation();
@@ -57,7 +58,7 @@ function SubmitDialog(props: SubmitDialogProps) {
                 }
                 setSnackbar({
                     open: true,
-                    message: 'Evaluasi berhasil disimpan!',
+                    message: 'Evaluation saved successfully!',
                     severity: 'success'
                 });
                 router.back();
@@ -65,7 +66,7 @@ function SubmitDialog(props: SubmitDialogProps) {
                 console.error("Error submitting quiz:", error);
                 setSnackbar({
                     open: true,
-                    message: 'Gagal menyimpan evaluasi',
+                    message: 'Failed to save evaluation',
                     severity: 'error'
                 });
             }
@@ -80,8 +81,33 @@ function SubmitDialog(props: SubmitDialogProps) {
 
             if (unanswered.length > 0) {
                 const missingNumbers = unanswered.map((q, i) => `${i + 1} `).join("\n");
-                alert(`❗ Masih ada pertanyaan yang belum dijawab:\n\n${missingNumbers}`);
+                alert(`❗ There are still unanswered questions:\n\n${missingNumbers}`);
                 return;
+            }
+
+            if (lembaga === 1) {
+                const missingFiles = jawaban.filter((j) => {
+                    const uploadedFiles = files?.[j.q_no] || [];
+                    return uploadedFiles.length === 0;
+                });
+
+                if (missingFiles.length > 0) {
+                    const missingNumbers = missingFiles
+                        .map((j) => {
+                            const questionIndex = pertanyaan.findIndex(
+                                (q) => q.q_no === j.q_no
+                            );
+
+                            return questionIndex + 1;
+                        })
+                        .join(", ");
+
+                    alert(
+                        `❗ Supporting documents are required for the following questions:\n\n${missingNumbers}`
+                    );
+
+                    return;
+                }
             }
 
             try {
@@ -102,7 +128,7 @@ function SubmitDialog(props: SubmitDialogProps) {
                 }
                 setSnackbar({
                     open: true,
-                    message: 'Evaluasi berhasil disubmit!',
+                    message: 'Evaluation submitted successfully!',
                     severity: 'success'
                 });
                 router.back();
@@ -110,7 +136,7 @@ function SubmitDialog(props: SubmitDialogProps) {
                 console.error("Error submitting quiz:", error);
                 setSnackbar({
                     open: true,
-                    message: 'Gagal submit evaluasi',
+                    message: 'Failed to submit evaluation',
                     severity: 'error'
                 });
             }
@@ -122,7 +148,7 @@ function SubmitDialog(props: SubmitDialogProps) {
                 open={open}
                 onClose={onClose}
             >
-                <DialogTitle>Submit Pengisian Evaluasi Diri</DialogTitle>
+                <DialogTitle>Submit Self Evaluation</DialogTitle>
                 <IconButton
                     aria-label="close"
                     onClick={onClose}

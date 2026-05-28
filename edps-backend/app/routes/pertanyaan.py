@@ -107,7 +107,7 @@ def get_pertanyaan_by_qs(id_qs):
 def import_question_csv():
     try:
         file = request.files['file']
-        gambar = request.files['gambar']
+        gambar = request.files.get('gambar')
 
         id_lembaga = int(request.form.get("id_lembaga"))
         question_set_version = float(request.form.get("question_set"))
@@ -193,7 +193,7 @@ def import_question_csv():
         elif qs.id_lembaga == 2:
             required_columns = [
                 "q_no",
-                "no_butir",
+                "kode_dimensi",
                 "kode_kriteria",
                 "kriteria",
                 "dimensi",
@@ -257,7 +257,7 @@ def import_question_csv():
                 pertanyaan = LamEmba(
                     id_qs=qs.id_qs,
                     q_no=int(row.get("q_no")),
-                    no_butir = row.get("no_butir"),
+                    kode_dimensi = row.get("kode_dimensi"),
                     kode_kriteria=row.get("kode_kriteria"),
                     kriteria=row.get("kriteria"),
                     dimensi=row.get("dimensi"),
@@ -269,6 +269,9 @@ def import_question_csv():
             db.session.add(pertanyaan)
             inserted += 1
         qs.update_total_max_bobot()
+
+        # Reset file pointer to beginning
+        file.seek(0)
         file.save(path)
 
         db.session.commit()
@@ -323,7 +326,13 @@ def update_question_csv(id_qs):
         qs.deskripsi_gambar = deskripsi_gambar or qs.deskripsi_gambar
 
         if gambar:
-            gambar.save(qs.gambar_path)
+            if qs.gambar_path:
+                gambar.save(qs.gambar_path)
+            else:
+                gambar_filename = secure_filename(gambar.filename)
+                gambar_path = os.path.join(UPLOAD_FOLDER, gambar_filename)
+                os.makedirs(os.path.dirname(gambar_path), exist_ok=True)
+                gambar.save(gambar_path)
 
         is_used = db.session.query(
             exists().where(Akreditasi.id_qs == id_qs)
@@ -352,8 +361,10 @@ def update_question_csv(id_qs):
             if qs.id_lembaga == 1:
                 required_columns = [
                 "q_no",
+                "no_butir",
                 "kode_kriteria",
                 "kriteria",
+                "jenis",
                 "elemen_penilaian_lam",
                 "deskripsi_pertanyaan",
                 "bobot",
@@ -365,10 +376,11 @@ def update_question_csv(id_qs):
             elif qs.id_lembaga == 2:
                 required_columns = [
                 "q_no",
+                "kode_dimensi",
                 "kode_kriteria",
+                "kriteria",
                 "dimensi",
                 "deskripsi_pertanyaan",
-                "bobot",
                 "mandatory"
                 ]
             missing_columns = [col for col in required_columns if col not in df.columns]
@@ -400,8 +412,17 @@ def update_question_csv(id_qs):
                 LamEmba.query.filter_by(id_qs=id_qs).delete()
             
             inserted = 0
-            for _, row in df.iterrows():
+            for index, row in df.iterrows():
+
                 if qs.id_lembaga == 1:
+                    if pd.isnull(row.get("q_no")):
+                        return error_response(f"Row {index+1}: q_no is required", 400)
+                
+                    if pd.isnull(row.get("bobot")):
+                        return error_response(f"Row {index+1}: bobot is required", 400)
+                    
+                    row = row.where(pd.notnull(row), None)
+                    
                     pertanyaan = LamInfokom(
                     id_qs=id_qs,
                     q_no=int(row.get("q_no")),
@@ -417,6 +438,12 @@ def update_question_csv(id_qs):
                     jawaban_4=row.get("jawaban_4"),
                 )
                 elif qs.id_lembaga == 2:
+                    mandatory_val = str(row.get("mandatory")).lower()
+                    if mandatory_val not in ["true", "false"]:
+                        return error_response(f"Row {index+1}: mandatory must be 'true' or 'false'", 400)
+                    
+                    row = row.where(pd.notnull(row), None)
+                    
                     pertanyaan = LamEmba(
                     id_qs=id_qs,
                     q_no=int(row.get("q_no")),
@@ -430,6 +457,9 @@ def update_question_csv(id_qs):
                 inserted += 1
 
             qs.update_total_max_bobot()
+            
+            # Reset file pointer to beginning
+            file.seek(0)
             file.save(old_path)
 
         db.session.commit()
@@ -458,6 +488,9 @@ def download_csv(id_qs):
 
     if not qs:
         return error_response("Question set not found", 404)
+    
+    if not qs.csv_path:
+        return error_response("CSV path is empty", 404)
 
     if not os.path.exists(qs.csv_path):
         return error_response("File not found", 404)
@@ -465,7 +498,7 @@ def download_csv(id_qs):
     mime_type, _ = mimetypes.guess_type(qs.csv_path)
 
     response = make_response(send_file(
-        qs.file_path,
+        qs.csv_path,
         as_attachment=True,
         mimetype=mime_type or "application/octet-stream",
         download_name=qs.csv_name

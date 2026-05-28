@@ -23,3 +23,4 @@ class Fakultas(db.Model):
     nama_fakultas = db.Column(db.String(150))
 
     prodi = db.relationship("Prodi", back_populates="fakultas", cascade="all, delete-orphan")
+    user = db.relationship("User", back_populates="fakultas", cascade="all, delete-orphan")

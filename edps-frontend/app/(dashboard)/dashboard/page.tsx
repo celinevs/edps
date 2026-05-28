@@ -18,7 +18,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress
+  CircularProgress,
+  Tooltip,
+  IconButton
 } from "@mui/material";
 import CheckIcon from '@mui/icons-material/Check';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -50,8 +52,8 @@ function DashboardPage() {
   const [getProdi] = useLazyGetProdiQuery();
   const [getDashboardInfokom] = useLazyGetDashboardInfokomDetailQuery();
   const [getDashboardEmba] = useLazyGetDashboardEmbaDetailQuery();
-  const { data: lembagaData } = useGetLembagaQuery(selectedProdi);
-  const { data: akreditasiData } = useGetAkreditasiDropdownQuery({ id_prodi: selectedProdi, id_lembaga: selectedLembaga });
+  const { data: lembagaData } = useGetLembagaQuery(selectedProdi!, {skip: !selectedProdi,});
+  const { data: akreditasiData } = useGetAkreditasiDropdownQuery({id_prodi: selectedProdi,id_lembaga: selectedLembaga,},{ skip: !selectedProdi || !selectedLembaga,});
   const dashboardData = dashboardInfokom || dashboardEmba;
 
   // Safe data extraction with validation
@@ -61,7 +63,7 @@ function DashboardPage() {
   const radarLpmi = radarDatasets?.lpmi ?? [];
   const radarAssesor = radarDatasets?.assesor ?? [];
 
-  const isRadarValid = 
+  const isRadarValid =
     radarLabels.length >= 2 &&
     radarProdi.length === radarLabels.length &&
     radarLpmi.length === radarLabels.length &&
@@ -77,7 +79,7 @@ function DashboardPage() {
   const barLpmi = barDatasets?.lpmi ?? [];
   const barAssesor = barDatasets?.assesor ?? [];
 
-  const isBarValid = 
+  const isBarValid =
     barLabels.length > 0 &&
     barProdi.length === barLabels.length &&
     barLpmi.length === barLabels.length &&
@@ -113,6 +115,8 @@ function DashboardPage() {
   }, [akreditasiData]);
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (user?.role !== "PRODI") {
       getProdi().then((res) => {
         if (res.data?.data) {
@@ -244,9 +248,11 @@ function DashboardPage() {
         const max = row.weight || 1;
         const assessorPercent = (row.assesor / max) * 100;
         return (
-          <Box>
-            <LinearProgress variant="determinate" value={assessorPercent} />
-          </Box>
+          <Tooltip title={`Achievement: ${assessorPercent.toFixed(2)}%`} arrow>
+            <Box>
+              <LinearProgress variant="determinate" value={assessorPercent} />
+            </Box>
+          </Tooltip>
         );
       },
     },
@@ -303,25 +309,27 @@ function DashboardPage() {
       render: (row) => {
         const isPass = row.mandatory_pass;
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-            {row.total_assesor === null || row.total_lpmi == null
-              ? '-' :
-              isPass ? (
-                <>
-                  <CheckIcon sx={{ color: 'success.main' }} />
-                  <Typography sx={{ color: 'success.main', fontWeight: 500 }}>
-                    Pass
-                  </Typography>
-                </>
-              ) : (
-                <>
-                  <ClearIcon sx={{ color: 'error.main' }} />
-                  <Typography sx={{ color: 'error.main', fontWeight: 500 }}>
-                    Fail
-                  </Typography>
-                </>
-              )}
-          </Box>
+          <Tooltip title={isPass ? "This criteria meets the passing standard" : "This criteria does not meet the passing standard"} arrow>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+              {row.total_assesor === null || row.total_lpmi == null
+                ? '-' :
+                isPass ? (
+                  <>
+                    <CheckIcon sx={{ color: 'success.main' }} />
+                    <Typography sx={{ color: 'success.main', fontWeight: 500 }}>
+                      Pass
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <ClearIcon sx={{ color: 'error.main' }} />
+                    <Typography sx={{ color: 'error.main', fontWeight: 500 }}>
+                      Fail
+                    </Typography>
+                  </>
+                )}
+            </Box>
+          </Tooltip>
         );
       },
     },
@@ -332,33 +340,40 @@ function DashboardPage() {
       render: (row) => {
         let label = '';
         let icon = null;
+        let tooltipText = '';
 
         if (row.total_lpmi > row.total_assesor) {
           label = 'Over';
           icon = <ArrowUpwardIcon />;
+          tooltipText = `LPMI score is ${(row.total_lpmi - row.total_assesor).toFixed(2)} points higher than Assessor`;
         } else if (row.total_lpmi < row.total_assesor) {
           label = 'Under';
           icon = <ArrowDownwardIcon />;
+          tooltipText = `LPMI score is ${(row.total_assesor - row.total_lpmi).toFixed(2)} points lower than Assessor`;
         } else {
           label = 'Match';
           icon = <CheckIcon />;
+          tooltipText = 'LPMI score matches Assessor score';
         }
 
         return (
           row.total_lpmi == null || row.total_assesor == null ? (
             <Typography>-</Typography>
           ) : (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 1
-              }}
-            >
-              {icon}
-              <Typography>{label}</Typography>
-            </Box>
+            <Tooltip title={tooltipText} arrow>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1,
+                  cursor: 'pointer'
+                }}
+              >
+                {icon}
+                <Typography>{label}</Typography>
+              </Box>
+            </Tooltip>
           )
         );
       },
@@ -371,9 +386,11 @@ function DashboardPage() {
         const max = row.max_weight || 1;
         const assessorPercent = (row.total_assesor / max) * 100;
         return (
-          <Box>
-            <LinearProgress variant="determinate" value={assessorPercent} />
-          </Box>
+          <Tooltip title={`Achievement: ${assessorPercent.toFixed(2)}%`} arrow>
+            <Box>
+              <LinearProgress variant="determinate" value={assessorPercent} />
+            </Box>
+          </Tooltip>
         );
       },
     },
@@ -399,489 +416,543 @@ function DashboardPage() {
 
   return (
     <>
-      <Grid container alignItems="center" spacing={2} justifyContent="space-between" mb={3}>
-        <Grid size={3}>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 500,
-              color: 'primary.main',
-            }}
-          >
-            Dashboard
-          </Typography>
+      <Grid container alignItems="center" spacing={2} justifyContent="space-between" mb={2}>
+        <Grid size={5}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: 600,
+                color: 'primary.main',
+              }}
+            >
+              Dashboard {user?.nama_prodi? user?.nama_prodi: user?.role}
+            </Typography>
+          </Box>
         </Grid>
 
-        <Grid size={9}>
-          <Grid container spacing={2} justifyContent="flex-end">
+        <Grid size={7}>
+          <Grid container spacing={1.5} justifyContent="flex-end">
             {user?.role !== "PRODI" && (
               <Grid size={3}>
-                <FormControl fullWidth>
-                  <InputLabel>Prodi</InputLabel>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Prodi</InputLabel>
+                    <Select
+                      value={selectedProdi || ""}
+                      label="Prodi"
+                      onChange={(e) => setSelectedProdi(e.target.value)}
+                    >
+                      {prodi.map((p) => (
+                        <MenuItem key={p.id_prodi} value={p.id_prodi}>
+                          {p.nama_prodi}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+              </Grid>
+            )}
+
+            <Grid size={2.5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Lembaga</InputLabel>
                   <Select
-                    value={selectedProdi || ""}
-                    label="Prodi"
-                    onChange={(e) => setSelectedProdi(e.target.value)}
+                    value={selectedLembaga || ""}
+                    label="Lembaga"
+                    onChange={(e) => setSelectedLembaga(e.target.value as number)}
                   >
-                    {prodi.map((p) => (
-                      <MenuItem key={p.id_prodi} value={p.id_prodi}>
-                        {p.nama_prodi}
+                    {lembaga.map((l) => (
+                      <MenuItem key={l.id_lembaga} value={l.id_lembaga}>
+                        {l.nama_lembaga}
                       </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
-              </Grid>
-            )}
-
-            <Grid size={3}>
-              <FormControl fullWidth>
-                <InputLabel>Lembaga</InputLabel>
-                <Select
-                  value={selectedLembaga || ""}
-                  label="Lembaga"
-                  onChange={(e) => setSelectedLembaga(e.target.value as number)}
-                >
-                  {lembaga.map((l) => (
-                    <MenuItem key={l.id_lembaga} value={l.id_lembaga}>
-                      {l.nama_lembaga}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
             </Grid>
 
-            <Grid size={3}>
-              <FormControl fullWidth>
-                <InputLabel>Akreditasi</InputLabel>
-                <Select
-                  value={selectedAkreditasi || ""}
-                  label="Akreditasi"
-                  onChange={(e) => setSelectedAkreditasi(e.target.value)}
-                >
-                  {akreditasi.map((a) => (
-                    <MenuItem key={a.id_akreditasi} value={a.id_akreditasi}>
-                      {a.nama_akreditasi}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+            <Grid size={2.5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Akreditasi</InputLabel>
+                  <Select
+                    value={selectedAkreditasi || ""}
+                    label="Akreditasi"
+                    onChange={(e) => setSelectedAkreditasi(e.target.value)}
+                  >
+                    {akreditasi.map((a) => (
+                      <MenuItem key={a.id_akreditasi} value={a.id_akreditasi}>
+                        {a.nama_akreditasi}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
             </Grid>
           </Grid>
         </Grid>
       </Grid>
 
-      <Stack direction="column" spacing={2} sx={{ width: "100%", mb: 4 }}>
+      <Stack direction="column" spacing={2} sx={{ width: "100%", mb: 3 }}>
         {isDashboardLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 350 }}>
             <CircularProgress />
           </Box>
         ) : (!dashboardInfokom && !dashboardEmba) ? (
-          <Grid container spacing={2}>
-            {/* RADAR EMPTY */}
+          <Grid container spacing={1.5}>
             <Grid size={4.5}>
-              <Box
-                sx={{
-                  background: "#fff",
-                  borderRadius: 3,
-                  p: 2,
-                  border: "1px solid #e0e0e0",
-                  height: "100%",
-                }}
-              >
-                <Typography variant="h6" fontWeight={700} mb={2}>
-                  Assessment Radar
-                </Typography>
+              <Tooltip title="Radar chart will appear once data is available" arrow>
                 <Box
                   sx={{
-                    height: 300,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexDirection: "column",
-                    color: "text.secondary",
+                    background: "#fff",
+                    borderRadius: 2,
+                    p: 1.5,
+                    border: "1px solid #e0e0e0",
+                    height: "100%",
                   }}
                 >
-                  <Typography variant="body1" fontWeight={600}>
-                    No Radar Data
+                  <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                    Assessment Radar
                   </Typography>
-                  <Typography variant="body2">
-                    Select accreditation data first
-                  </Typography>
+                  <Box
+                    sx={{
+                      height: 260,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexDirection: "column",
+                      color: "text.secondary",
+                    }}
+                  >
+                    <Typography variant="body2" fontWeight={600}>
+                      No Radar Data
+                    </Typography>
+                    <Typography variant="caption">
+                      Select accreditation data first
+                    </Typography>
+                  </Box>
                 </Box>
-              </Box>
+              </Tooltip>
             </Grid>
 
-            {/* GAP HEATMAP EMPTY */}
             <Grid size={3}>
-              <Box
-                sx={{
-                  background: "#fff",
-                  borderRadius: 3,
-                  p: 2,
-                  border: "1px solid #e0e0e0",
-                  height: "100%",
-                }}
-              >
-                <Typography variant="h6" fontWeight={700} mb={2}>
-                  Gap Heatmap
-                </Typography>
+              <Tooltip title="Gap analysis will appear once data is available" arrow>
                 <Box
                   sx={{
-                    height: 300,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexDirection: "column",
-                    color: "text.secondary",
+                    background: "#fff",
+                    borderRadius: 2,
+                    p: 1.5,
+                    border: "1px solid #e0e0e0",
+                    height: "100%",
                   }}
                 >
-                  <Typography variant="body1" fontWeight={600}>
-                    No Gap Analysis
+                  <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                    Gap Heatmap
                   </Typography>
-                  <Typography variant="body2">
-                    Heatmap data unavailable
-                  </Typography>
+                  <Box
+                    sx={{
+                      height: 260,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexDirection: "column",
+                      color: "text.secondary",
+                    }}
+                  >
+                    <Typography variant="body2" fontWeight={600}>
+                      No Gap Analysis
+                    </Typography>
+                    <Typography variant="caption">
+                      Heatmap data unavailable
+                    </Typography>
+                  </Box>
                 </Box>
-              </Box>
+              </Tooltip>
             </Grid>
 
-            {/* BAR EMPTY */}
             <Grid size={4.5}>
-              <Box
-                sx={{
-                  background: "#fff",
-                  borderRadius: 3,
-                  p: 2,
-                  border: "1px solid #e0e0e0",
-                  height: "100%",
-                }}
-              >
-                <Typography variant="h6" fontWeight={700} mb={2}>
-                  Performance Trend
-                </Typography>
+              <Tooltip title="Performance trends will appear once data is available" arrow>
                 <Box
                   sx={{
-                    height: 300,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexDirection: "column",
-                    color: "text.secondary",
+                    background: "#fff",
+                    borderRadius: 2,
+                    p: 1.5,
+                    border: "1px solid #e0e0e0",
+                    height: "100%",
                   }}
                 >
-                  <Typography variant="body1" fontWeight={600}>
-                    No Performance Data
+                  <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                    Performance Trend
                   </Typography>
-                  <Typography variant="body2">
-                    Historical trend unavailable
-                  </Typography>
+                  <Box
+                    sx={{
+                      height: 260,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexDirection: "column",
+                      color: "text.secondary",
+                    }}
+                  >
+                    <Typography variant="body2" fontWeight={600}>
+                      No Performance Data
+                    </Typography>
+                    <Typography variant="caption">
+                      Historical trend unavailable
+                    </Typography>
+                  </Box>
                 </Box>
-              </Box>
+              </Tooltip>
             </Grid>
           </Grid>
         ) : (
-          <Grid container spacing={2}>
-            {/* RADAR CHART */}
+          <Grid container spacing={1.5}>
             <Grid size={4.5}>
-              <Box
-                sx={{
-                  background: "#fff",
-                  borderRadius: 3,
-                  p: 2,
-                  height: "100%",
-                  border: "1px solid #e0e0e0",
-                }}
-              >
-                <Typography variant="h6" fontWeight={700} mb={2}>
-                  Assessment Radar
-                </Typography>
-                {isRadarValid ? (
-                  <RadarChart
-                    key={selectedAkreditasi}
-                    height={300}
-                    series={[
-                      {
-                        label: "Prodi",
-                        data: radarProdi,
-                        fillArea: true,
-                      },
-                      {
-                        label: "LPMI",
-                        data: radarLpmi,
-                        fillArea: true,
-                      },
-                      {
-                        label: "Assessor",
-                        data: radarAssesor,
-                        fillArea: true,
-                      },
-                    ]}
-                    radar={{
-                      max: 100,
-                      metrics: radarLabels,
-                    }}
-                  />
-                ) : (
-                  <Box
-                    sx={{
-                      height: 300,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexDirection: "column",
-                      color: "text.secondary",
-                    }}
-                  >
-                    <Typography variant="body1" fontWeight={600}>
-                      Not Enough Radar Data
-                    </Typography>
-                    <Typography variant="body2">
-                      Radar chart requires at least 2 criteria with valid data
-                    </Typography>
+              <Tooltip title="Radar chart comparing Prodi, LPMI, and Assessor scores across criteria" arrow>
+                <Box
+                  sx={{
+                    background: "#fff",
+                    borderRadius: 2,
+                    p: 1.5,
+                    height: "100%",
+                    border: "1px solid #e0e0e0",
+                  }}
+                >
+                  <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                    Assessment Radar
+                  </Typography>
+                  <Box sx={{ height: 260, width: '100%' }}>
+                    {isRadarValid ? (
+                      <RadarChart
+                        key={selectedAkreditasi}
+                        height={260}
+                        series={[
+                          {
+                            label: "Prodi",
+                            data: radarProdi,
+                            fillArea: true,
+                          },
+                          {
+                            label: "LPMI",
+                            data: radarLpmi,
+                            fillArea: true,
+                          },
+                          {
+                            label: "Assessor",
+                            data: radarAssesor,
+                            fillArea: true,
+                          },
+                        ]}
+                        radar={{
+                          max: 100,
+                          metrics: radarLabels,
+                        }}
+                      />
+                    ) : (
+                      <Box
+                        sx={{
+                          height: 260,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexDirection: "column",
+                          color: "text.secondary",
+                        }}
+                      >
+                        <Typography variant="body2" fontWeight={600}>
+                          Not Enough Radar Data
+                        </Typography>
+                        <Typography variant="caption">
+                          Radar chart requires at least 2 criteria with valid data
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
-                )}
-              </Box>
+                </Box>
+              </Tooltip>
             </Grid>
 
-            {/* GAP HEATMAP */}
             <Grid size={3}>
-              <Box
-                sx={{
-                  background: "#fff",
-                  borderRadius: 3,
-                  p: 2,
-                  border: "1px solid #e0e0e0",
-                  height: "100%",
-                }}
-              >
-                <Typography variant="h6" fontWeight={700} mb={2}>
-                  Gap Heatmap
-                </Typography>
-                {isValidGapData ? (
-                  <>
-                    <Stack spacing={1}>
-                      {gapHeatmap.map((item: any, index: number) => (
-                        <Grid container key={item.criteria || index}>
+              <Tooltip title="Heatmap showing gaps between Prodi vs LPMI and LPMI vs Assessor (Green: Positive, Red: Negative)" arrow>
+                <Box
+                  sx={{
+                    background: "#fff",
+                    borderRadius: 2,
+                    p: 1.5,
+                    border: "1px solid #e0e0e0",
+                    height: "100%",
+                  }}
+                >
+                  <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                    Gap Heatmap
+                  </Typography>
+                  <Box sx={{ height: 260, overflowY: 'auto' }}>
+                    {isValidGapData ? (
+                      <>
+                        <Stack spacing={0.5}>
+                          {gapHeatmap.map((item: any, index: number) => (
+                            <Grid container key={item.criteria || index} spacing={0.5}>
+                              <Grid size={4}>
+                                <Tooltip title={`Criteria: ${item.criteria || '-'}`} arrow>
+                                  <Box
+                                    sx={{
+                                      p: 0.75,
+                                      border: "1px solid #eee",
+                                      fontSize: 12,
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis'
+                                    }}
+                                  >
+                                    {item.criteria || '-'}
+                                  </Box>
+                                </Tooltip>
+                              </Grid>
+                              <Grid size={4}>
+                                <Tooltip title={`Prodi vs LPMI gap: ${item.prodi_vs_lpmi > 0 ? '+' : ''}${item.prodi_vs_lpmi ?? 0} (Positive means Prodi scores higher)`} arrow>
+                                  <Box
+                                    sx={{
+                                      p: 0.75,
+                                      color: "#fff",
+                                      textAlign: "center",
+                                      background: heatmapColor(item.prodi_vs_lpmi ?? 0),
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      fontSize: 12
+                                    }}
+                                  >
+                                    {item.prodi_vs_lpmi > 0 ? "+" : ""}
+                                    {item.prodi_vs_lpmi ?? 0}
+                                  </Box>
+                                </Tooltip>
+                              </Grid>
+                              <Grid size={4}>
+                                <Tooltip title={`LPMI vs Assessor gap: ${item.lpmi_vs_assesor > 0 ? '+' : ''}${item.lpmi_vs_assesor ?? 0} (Positive means LPMI scores higher)`} arrow>
+                                  <Box
+                                    sx={{
+                                      p: 0.75,
+                                      color: "#fff",
+                                      textAlign: "center",
+                                      background: heatmapColor(item.lpmi_vs_assesor ?? 0),
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      fontSize: 12
+                                    }}
+                                  >
+                                    {item.lpmi_vs_assesor > 0 ? "+" : ""}
+                                    {item.lpmi_vs_assesor ?? 0}
+                                  </Box>
+                                </Tooltip>
+                              </Grid>
+                            </Grid>
+                          ))}
+                        </Stack>
+                        <Grid container mt={1}>
+                          <Grid size={4}></Grid>
                           <Grid size={4}>
-                            <Box
-                              sx={{
-                                p: 1,
-                                border: "1px solid #eee",
-                                fontSize: 14,
-                              }}
-                            >
-                              {item.criteria || '-'}
-                            </Box>
+                            <Typography textAlign="center" fontSize={10}>
+                              Prodi vs LPMI
+                            </Typography>
                           </Grid>
                           <Grid size={4}>
-                            <Box
-                              sx={{
-                                p: 1,
-                                color: "#fff",
-                                textAlign: "center",
-                                background: heatmapColor(item.prodi_vs_lpmi ?? 0),
-                                fontWeight: 700,
-                              }}
-                            >
-                              {item.prodi_vs_lpmi > 0 ? "+" : ""}
-                              {item.prodi_vs_lpmi ?? 0}
-                            </Box>
-                          </Grid>
-                          <Grid size={4}>
-                            <Box
-                              sx={{
-                                p: 1,
-                                color: "#fff",
-                                textAlign: "center",
-                                background: heatmapColor(item.lpmi_vs_assesor ?? 0),
-                                fontWeight: 700,
-                              }}
-                            >
-                              {item.lpmi_vs_assesor > 0 ? "+" : ""}
-                              {item.lpmi_vs_assesor ?? 0}
-                            </Box>
+                            <Typography textAlign="center" fontSize={10}>
+                              LPMI vs Assessor
+                            </Typography>
                           </Grid>
                         </Grid>
-                      ))}
-                    </Stack>
-                    <Grid container mt={2}>
-                      <Grid size={4}></Grid>
-                      <Grid size={4}>
-                        <Typography textAlign="center" fontSize={12}>
-                          Prodi vs LPMI
+                      </>
+                    ) : (
+                      <Box
+                        sx={{
+                          height: 260,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexDirection: "column",
+                          color: "text.secondary",
+                        }}
+                      >
+                        <Typography variant="body2" fontWeight={600}>
+                          No Gap Data Available
                         </Typography>
-                      </Grid>
-                      <Grid size={4}>
-                        <Typography textAlign="center" fontSize={12}>
-                          LPMI vs Assessor
+                        <Typography variant="caption">
+                          Heatmap data unavailable for this selection
                         </Typography>
-                      </Grid>
-                    </Grid>
-                  </>
-                ) : (
-                  <Box
-                    sx={{
-                      height: 300,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexDirection: "column",
-                      color: "text.secondary",
-                    }}
-                  >
-                    <Typography variant="body1" fontWeight={600}>
-                      No Gap Data Available
-                    </Typography>
-                    <Typography variant="body2">
-                      Heatmap data unavailable for this selection
-                    </Typography>
+                      </Box>
+                    )}
                   </Box>
-                )}
-              </Box>
+                </Box>
+              </Tooltip>
             </Grid>
 
-            {/* BAR CHART */}
+            {/* BAR CHART - FIXED SIZE */}
             <Grid size={4.5}>
-              <Box
-                sx={{
-                  background: "#fff",
-                  borderRadius: 3,
-                  p: 2,
-                  border: "1px solid #e0e0e0",
-                  height: "100%",
-                }}
-              >
-                <Typography variant="h6" fontWeight={700} mb={2}>
-                  Performance Trend
-                </Typography>
-                {isBarValid ? (
-                  <BarChart
-                    height={300}
-                    xAxis={[
-                      {
-                        scaleType: "band",
-                        data: barLabels,
-                      },
-                    ]}
-                    series={[
-                      {
-                        label: 'Prodi',
-                        data: barProdi,
-                      },
-                      {
-                        label: 'LPMI',
-                        data: barLpmi,
-                      },
-                      {
-                        label: 'Assessor',
-                        data: barAssesor,
-                      },
-                    ]}
-                  />
-                ) : (
-                  <Box
-                    sx={{
-                      height: 300,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexDirection: "column",
-                      color: "text.secondary",
-                    }}
-                  >
-                    <Typography variant="body1" fontWeight={600}>
-                      Insufficient Bar Chart Data
-                    </Typography>
-                    <Typography variant="body2">
-                      Complete trend data unavailable
-                    </Typography>
+              <Tooltip title="Bar chart comparing performance trends across 5 years" arrow>
+                <Box
+                  sx={{
+                    background: "#fff",
+                    borderRadius: 2,
+                    p: 1.5,
+                    border: "1px solid #e0e0e0",
+                    height: "100%",
+                  }}
+                >
+                  <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                    Performance Trend
+                  </Typography>
+                  <Box sx={{ height: 260, width: '100%' }}>
+                    {isBarValid ? (
+                      <BarChart
+                        height={260}
+                        xAxis={[
+                          {
+                            scaleType: "band",
+                            data: barLabels,
+                          },
+                        ]}
+                        series={[
+                          {
+                            label: 'Prodi',
+                            data: barProdi,
+                          },
+                          {
+                            label: 'LPMI',
+                            data: barLpmi,
+                          },
+                          {
+                            label: 'Assessor',
+                            data: barAssesor,
+                          },
+                        ]}
+                      />
+                    ) : (
+                      <Box
+                        sx={{
+                          height: 260,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexDirection: "column",
+                          color: "text.secondary",
+                        }}
+                      >
+                        <Typography variant="body2" fontWeight={600}>
+                          Insufficient Bar Chart Data
+                        </Typography>
+                        <Typography variant="caption">
+                          Complete trend data unavailable
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
-                )}
-              </Box>
+                </Box>
+              </Tooltip>
             </Grid>
           </Grid>
         )}
 
-        <Grid container spacing={2} mt={1}>
+        {/* KPI Cards - Smaller */}
+        <Grid container spacing={1.5} mt={0}>
           <Grid size={3}>
-            <Box
-              sx={{
-                background: "linear-gradient(135deg,#0d47a1,#1565c0)",
-                color: "#fff",
-                borderRadius: 3,
-                p: 3,
-              }}
-            >
-              <Typography variant="body2">Overall Consistency</Typography>
-              <Typography variant="h4" fontWeight={700}>
-                {dashboardData?.consistency != null
-                  ? `${Number(dashboardData.consistency).toFixed(2)}%`
-                  : "-"}
-              </Typography>
-            </Box>
+            <Tooltip title="Overall consistency percentage across all assessments" arrow>
+              <Box
+                sx={{
+                  background: "linear-gradient(135deg,#0d47a1,#1565c0)",
+                  color: "#fff",
+                  borderRadius: 2,
+                  p: 2,
+                }}
+              >
+                <Typography variant="caption">Overall Consistency</Typography>
+                <Typography variant="h5" fontWeight={700}>
+                  {dashboardData?.consistency != null
+                    ? `${Number(dashboardData.consistency).toFixed(2)}%`
+                    : "-"}
+                </Typography>
+              </Box>
+            </Tooltip>
           </Grid>
 
           <Grid size={3}>
-            <Box
-              sx={{
-                background: "linear-gradient(135deg,#b71c1c,#e53935)",
-                color: "#fff",
-                borderRadius: 3,
-                p: 3,
-              }}
-            >
-              <Typography variant="body2">Critical Gap</Typography>
-              <Typography variant="h4" fontWeight={700}>
-                {dashboardData?.max_gap != null
-                  ? Number(dashboardData.max_gap.value).toFixed(2)
-                  : "-"}
-              </Typography>
-            </Box>
+            <Tooltip title="Largest gap identified in the assessment (higher values indicate more critical issues)" arrow>
+              <Box
+                sx={{
+                  background: "linear-gradient(135deg,#b71c1c,#e53935)",
+                  color: "#fff",
+                  borderRadius: 2,
+                  p: 2,
+                }}
+              >
+                <Typography variant="caption">Critical Gap {dashboardData?.max_gap.source? `(${dashboardData?.max_gap.source})`: ''}</Typography>
+                <Typography variant="h5" fontWeight={700}>
+                  {dashboardData?.max_gap != null
+                    ? Number(dashboardData.max_gap.value).toFixed(2)
+                    : "-"}
+                </Typography>
+              </Box>
+            </Tooltip>
           </Grid>
 
           <Grid size={3}>
-            <Box
-              sx={{
-                background: "linear-gradient(135deg,#1b5e20,#43a047)",
-                color: "#fff",
-                borderRadius: 3,
-                p: 3,
-              }}
-            >
-              <Typography variant="body2">Prediction Score</Typography>
-              <Typography variant="h4" fontWeight={700}>
-                {(dashboardData as any)?.prediction?.predicted_score != null
-                  ? Number((dashboardData as any).prediction.predicted_score).toFixed(3)
-                  : "-"}
-              </Typography>
-            </Box>
+            <Tooltip title="Predicted future assessor score based on last 3 years performance" arrow>
+              <Box
+                sx={{
+                  background: "linear-gradient(135deg,#1b5e20,#43a047)",
+                  color: "#fff",
+                  borderRadius: 2,
+                  p: 2,
+                }}
+              >
+                <Typography variant="caption">Prediction Score {(dashboardData as any)?.prediction?.future_year? `in ${(dashboardData as any)?.prediction?.future_year}`: ''}</Typography>
+                <Typography variant="h5" fontWeight={700}>
+                  {(dashboardData as any)?.prediction?.predicted_score != null
+                    ? Number((dashboardData as any).prediction.predicted_score).toFixed(3)
+                    : "-"}
+                </Typography>
+              </Box>
+            </Tooltip>
           </Grid>
 
           <Grid size={3}>
-            <Box
-              sx={{
-                background: "linear-gradient(135deg,#ef6c00,#ffa726)",
-                color: "#fff",
-                borderRadius: 3,
-                p: 3,
-              }}
+            <Tooltip
+              title={
+                <>
+                  <div><strong>Risk Score Formula</strong></div>
+                  <div>• 45% → Assessor score performance</div>
+                  <div>• 20% → LPMI vs Assessor gap</div>
+                  <div>• 15% → Agreement consistency</div>
+                  <div>• 10% → Negative assessment trend</div>
+                  <br />
+                  <div>
+                    Higher risk indicates lower assessor performance
+                    and greater inconsistency.
+                  </div>
+                </>
+              }
+              arrow
             >
-              <Typography variant="body2">Risk Level</Typography>
-              <Typography variant="h4" fontWeight={700}>
-                {dashboardData?.risk_major?.risk_level_combined || "-"}
-              </Typography>
-            </Box>
+              <Box
+                sx={{
+                  background: "linear-gradient(135deg,#ef6c00,#ffa726)",
+                  color: "#fff",
+                  borderRadius: 2,
+                  p: 2,
+                }}
+              >
+                <Typography variant="caption">Risk Level</Typography>
+                <Typography variant="h5" fontWeight={700}>
+                  {dashboardData?.risk_major?.risk_level_combined || "-"}
+                </Typography>
+              </Box>
+            </Tooltip>
           </Grid>
         </Grid>
 
         {selectedLembaga === 1 && dashboardInfokom && (
           <>
             <Typography
-              variant="h5"
+              variant="h6"
               gutterBottom
               sx={{
-                fontWeight: 700,
+                fontWeight: 600,
                 color: 'primary.main',
+                mt: 1
               }}
             >
               Average Score by Weight
@@ -893,15 +964,16 @@ function DashboardPage() {
             />
           </>
         )}
-        
+
         {selectedLembaga === 2 && dashboardEmba && (
           <>
             <Typography
-              variant="h5"
+              variant="h6"
               gutterBottom
               sx={{
-                fontWeight: 700,
+                fontWeight: 600,
                 color: 'primary.main',
+                mt: 1
               }}
             >
               Average Score by Criteria

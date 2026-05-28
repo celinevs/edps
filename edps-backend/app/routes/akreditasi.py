@@ -54,6 +54,7 @@ def get_akreditasi():
         is_home_page = request.args.get('is_home_page')
 
         query = Akreditasi.query
+        query = query.order_by(Akreditasi.tanggal_mulai.desc())
         today = date.today()
         
         if fakultas:
@@ -232,7 +233,8 @@ def get_akreditasi_dropdown():
              query = query.join(Akreditasi.question_set).filter(
                  QuestionSet.id_lembaga == id_lembaga
                  )
-            
+             
+        query = query.order_by(Akreditasi.tahun_berlaku.desc())
         akreditasi_list = query.all()
         
         results = []
@@ -849,7 +851,7 @@ def get_dashboard_detail_infokom():
                 func.sum(Akreditasi.total_skor_assesor),
                 )
                 .filter(
-                # Akreditasi.id_qs == id_qs,
+                Akreditasi.id_qs == id_qs,
                 Akreditasi.id_prodi == akreditasi_obj.id_prodi
                 )
                 .group_by(Akreditasi.tahun_berlaku)
@@ -867,11 +869,12 @@ def get_dashboard_detail_infokom():
                 }
                 }
         
-        raw_df = fetch_data_from_db('infokom', id_prodi= akreditasi_obj.id_prodi, current_year=akreditasi_obj.tahun_berlaku)
+        raw_df = fetch_data_from_db('infokom', id_prodi= akreditasi_obj.id_prodi, current_year=akreditasi_obj.tahun_berlaku, reviewed=True)
         prediction_df = None
+        risk_major = None
 
         
-        if raw_df is not None and not raw_df.empty:
+        if raw_df is not None and not raw_df.empty and akreditasi_obj.status == 'Reviewed':
             feature_df = prepare_features(raw_df)
             prepared_df = aggregate_per_exam(feature_df)
             features = prepared_df.groupby(["major", "exam"], as_index=False).last()
@@ -1135,11 +1138,11 @@ def get_dashboard_detail_emba():
                 consistency_score = round(consistency_score, 2)
         
         # Prediction and risk metrics
-        raw_df = fetch_data_from_db('emba', id_prodi=akreditasi_obj.id_prodi, current_year=akreditasi_obj.tahun_berlaku)
+        raw_df = fetch_data_from_db('emba', id_prodi=akreditasi_obj.id_prodi, current_year=akreditasi_obj.tahun_berlaku, reviewed=True)
         prediction_df = None
         risk_major = None
 
-        if raw_df is not None and not raw_df.empty:
+        if raw_df is not None and not raw_df.empty and akreditasi_obj.status == 'Reviewed':
             feature_df = prepare_features(raw_df)
             prepared_df = aggregate_per_exam(feature_df)
             features = prepared_df.groupby(["major", "exam"], as_index=False).last()
@@ -1308,12 +1311,12 @@ def get_report():
         "bobot": "sum"
         })
         .reset_index()
-        .rename(columns={
-        "jawaban_prodi": "total_prodi",
-        "jawaban_lpmi": "total_lpmi",
-        "jawaban_assessor": "total_assesor"
-        })
         )
+    
+    bar_df["total_prodi"] = (bar_df["jawaban_prodi"] / bar_df["bobot"])
+    bar_df["total_lpmi"] = (bar_df["jawaban_lpmi"] / bar_df["bobot"])
+    bar_df["total_assesor"] = (bar_df["jawaban_assessor"] / bar_df["bobot"])
+
     bar_df["LAM"] = bar_df["exam"].replace({
     "laminfokom": "Infokom",
     "lamemba": "Emba"})

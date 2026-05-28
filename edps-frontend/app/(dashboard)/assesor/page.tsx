@@ -52,6 +52,19 @@ function AssesorPage() {
         router.push('/form');
     };
 
+    const handleAnalytic = (row: Akreditasi) => {
+        sessionStorage.setItem('formData', JSON.stringify({
+            id_periode: row.id_akreditasi,
+            status: row.status,
+            nama_periode: row.nama_akreditasi,
+            tanggal_selesai: row.tanggal_selesai,
+            lembaga: row.question_set.id_lembaga
+        }));
+
+        router.push('/analytics');
+    };
+
+
     const columns: Column<Akreditasi>[] = [
         {
             id: 'prodi',
@@ -104,9 +117,16 @@ function AssesorPage() {
                     <Button
                         size="small"
                         variant="contained"
-                    onClick={() => handleReview(row)}
+                        onClick={() => handleReview(row)}
                     >
                         {(row.status == 'Reviewed') ? 'Review Form' : 'Input Assessor Score'}
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => handleAnalytic(row)}
+                    >
+                        View Analytic
                     </Button>
                 </Stack>
             ),

@@ -10,11 +10,13 @@ interface PagePaginationDialogProps {
     currentPage: number;
     answers: { [key: number]: number };
     pertanyaan: any[];
+    files: { [key: number]: any[] };
+    lembaga?: number;
     onSelectPage: (page: number) => void;
 }
 
 function PagePaginationDialog(props: PagePaginationDialogProps) {
-    const { open, onClose, totalPage, currentPage, answers, pertanyaan, onSelectPage } = props;
+    const { open, onClose, totalPage, currentPage, answers, files, pertanyaan, onSelectPage, lembaga } = props;
 
     return (
         <>
@@ -50,7 +52,20 @@ function PagePaginationDialog(props: PagePaginationDialogProps) {
                         {Array.from({ length: totalPage }, (_, i) => {
                             const page = i + 1;
                             const isSelected = page === currentPage;
-                            const isAnswered = pertanyaan[i]?.q_no in answers;
+                            const qNo = pertanyaan[i]?.q_no;
+
+                            const hasAnswer = qNo in answers;
+                            const hasFile = (files[qNo]?.length || 0) > 0;
+
+                            const isAnswered =
+                                lembaga === 1
+                                    ? hasAnswer && hasFile
+                                    : hasAnswer;
+
+                            const hasMissingFileError =
+                                lembaga === 1 &&
+                                hasAnswer &&
+                                !hasFile;
 
                             return (
                                 <Button
@@ -81,7 +96,11 @@ function PagePaginationDialog(props: PagePaginationDialogProps) {
                                             left: 0,
                                             width: "100%",
                                             height: 10,
-                                            backgroundColor: isAnswered ? "#4CAF50" : "#d9d9d9",
+                                            backgroundColor: isAnswered
+                                                ? "#4CAF50"
+                                                : hasMissingFileError
+                                                    ? "#f44336"
+                                                    : "#d9d9d9",
                                             borderBottomLeftRadius: 6,
                                             borderBottomRightRadius: 6,
                                         }}
