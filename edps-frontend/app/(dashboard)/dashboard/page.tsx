@@ -53,7 +53,7 @@ function DashboardPage() {
   const [getDashboardInfokom] = useLazyGetDashboardInfokomDetailQuery();
   const [getDashboardEmba] = useLazyGetDashboardEmbaDetailQuery();
   const { data: lembagaData } = useGetLembagaQuery(selectedProdi!, {skip: !selectedProdi,});
-  const { data: akreditasiData } = useGetAkreditasiDropdownQuery({id_prodi: selectedProdi,id_lembaga: selectedLembaga,},{ skip: !selectedProdi || !selectedLembaga,});
+  const { data: akreditasiData } = useGetAkreditasiDropdownQuery({id_prodi: selectedProdi, id_lembaga: selectedLembaga,},{ skip: !selectedProdi || !selectedLembaga});
   const dashboardData = dashboardInfokom || dashboardEmba;
 
   // Safe data extraction with validation
@@ -118,7 +118,7 @@ function DashboardPage() {
     if (authLoading) return;
 
     if (user?.role !== "PRODI") {
-      getProdi().then((res) => {
+      getProdi(user?.id_fakultas).then((res) => {
         if (res.data?.data) {
           setProdi(res.data.data);
           if (res.data.data.length > 0) {

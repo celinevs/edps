@@ -41,7 +41,7 @@ function EventPage() {
     const [akreditasi, setAkreditasi] = useState<Akreditasi[]>([]);
     const [prodi, setProdi] = useState<GetProdi[]>([]);
     const [tahun, setTahun] = useState<string[]>([]);
-    const { data: prodiData } = useGetProdiQuery();
+    const { data: prodiData } = useGetProdiQuery(undefined);
     const { data: tahunData } = useGetTahunBerlakuQuery({ id_prodi: user?.id_prodi || undefined });
     const today = new Date();
 

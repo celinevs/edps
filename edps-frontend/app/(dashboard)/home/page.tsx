@@ -36,7 +36,7 @@ function HomePage() {
     const [prodi, setProdi] = useState<GetProdi[]>([]);
     const isAdmin = user?.role === 'ADMIN';
     const isUPPS = user?.role === 'UPPS' || user?.role === 'SUPERADMIN';
-    const { data: prodiData } = useGetProdiQuery();
+    const { data: prodiData } = useGetProdiQuery(user?.id_fakultas);
     const { data: tahunData } = useGetTahunBerlakuQuery({ id_prodi: user?.id_prodi || undefined });
     const { data: lembagaData } = useGetLembagaQuery(undefined);
 
@@ -74,7 +74,7 @@ function HomePage() {
         is_home_page: true,
         id_prodi: filters.id_prodi || undefined,
         tahun_berlaku: filters.tahun_berlaku || undefined,
-        fakultas: filters.fakultas || undefined,
+        fakultas: user?.id_fakultas || filters.fakultas || undefined,
         id_qs: filters.id_qs || undefined,
         id_lembaga: filters.id_lembaga || undefined,
         ...(isAdmin && { only_null_assesor: true }),

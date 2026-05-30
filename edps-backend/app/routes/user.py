@@ -65,7 +65,7 @@ def get_users():
 
     query = User.query
 
-    query = query.filter(User.id_user != current_user_id)
+    # query = query.filter(User.id_user != current_user_id)
 
     if current_role == "ADMIN":
         query = query.filter(User.role != "SUPERADMIN")

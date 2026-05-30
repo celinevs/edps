@@ -338,11 +338,8 @@ def update_question_csv(id_qs):
             exists().where(Akreditasi.id_qs == id_qs)
         ).scalar()
 
-        if is_used:
-            return error_response(
-                "Question set is already used in accreditation and cannot be modified",
-                400
-            )
+        if is_used and file:
+            return error_response("Question set is already used in accreditation and cannot be modified",400)
         
         if file:
             qs.csv_name = file.filename

@@ -11,8 +11,13 @@ export const prodiApi = baseApi
     })
     .injectEndpoints({
         endpoints: (builder) => ({
-            getProdi: builder.query<APIResponse<GetProdi[]>, void>({
-                query: () => `/prodi`,
+            getProdi: builder.query<APIResponse<GetProdi[]>, string | undefined>({
+                query: (id_fakultas) => ({
+                    url: `/prodi`,
+                    params: id_fakultas
+                        ? { id_fakultas }
+                        : undefined,
+                }),
                 providesTags: ["prodi"],
             }),
             getFakultas: builder.query<APIResponse<Fakultas[]>, void>({

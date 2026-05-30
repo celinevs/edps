@@ -11,7 +11,7 @@ import os
 import joblib
 from sklearn.metrics import r2_score
 
-def fetch_data_from_db(filtered=None, id_prodi=None, year=None, current_year=None, reviewed=False):
+def fetch_data_from_db(filtered=None, id_prodi=None, year=None, current_year=None, reviewed=False, id_fakultas=None):
     """Fetch raw data from database using SQLAlchemy"""
 
     queries = []
@@ -45,6 +45,9 @@ def fetch_data_from_db(filtered=None, id_prodi=None, year=None, current_year=Non
     
     if reviewed:
         common_filters.append(Akreditasi.status == 'Reviewed')
+    
+    if id_fakultas:
+        common_filters.append(Prodi.id_fakultas == id_fakultas)
 
     # LAM INFOKOM QUERY
     if filtered != 'emba':

@@ -182,6 +182,7 @@ export const akreditasiApi = baseApi
         {
           tahun_berlaku: string;
           id_lembaga?: number;
+          id_fakultas?: string;
         }
       >({
         query: (params) => ({

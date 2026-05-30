@@ -45,6 +45,8 @@ function UserPage() {
         { id: 'role', label: 'Role' },
         {id: 'nama_prodi', label:'Prodi',  render: (row) =>
                row.nama_prodi? row.nama_prodi : '-'},
+        {id: 'nama_fakultas', label:'Fakultas',  render: (row) =>
+               row.nama_fakultas? row.nama_fakultas : '-'},
         {
             id: 'is_active', label: 'Status' ,
             render: (row) =>

@@ -33,6 +33,14 @@ function QuestionListPage() {
         }
     }, [data]);
 
+    const handleUploadPage = (row: QuestionSetItem) => {
+        sessionStorage.setItem('uploadData', JSON.stringify({
+            can_edit: row.can_edit
+        }));
+
+        router.push(`/question-list/upload?id_qs=${row.id_qs}`);
+    };
+
     const columns: Column<QuestionSetItem>[] = [
         { id: 'nama_lembaga', label: 'Accreditor' },
         { id: 'versi', label: 'Version' },
@@ -50,8 +58,8 @@ function QuestionListPage() {
                     <Button
                         size="small"
                         variant="contained"
-                        disabled={!row.can_edit || false}
-                        onClick={() => router.push(`/question-list/upload?id_qs=${row.id_qs}`)}
+                        // disabled={!row.can_edit || false}
+                        onClick={() => handleUploadPage(row)}
                     >
                         Edit File
                     </Button>

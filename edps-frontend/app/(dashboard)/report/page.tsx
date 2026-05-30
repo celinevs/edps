@@ -6,14 +6,8 @@ import {
     Stack,
     Box,
     Grid,
-    LinearProgress,
-    FormControl,
-    InputLabel,
-    Select,
     MenuItem,
     CircularProgress,
-    Chip,
-    Paper,
     Alert,
     Tooltip,
     Skeleton,
@@ -21,6 +15,7 @@ import {
 } from "@mui/material";
 import InfoIcon from '@mui/icons-material/Info';
 import { useForm } from 'react-hook-form';
+import { useAuth } from "@/app/service/hooks/useAuth";
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { ReportData, IndicatorTable, RadarReport } from "@/model/Akreditasi";
@@ -73,7 +68,6 @@ const EmptyState: React.FC = () => (
     </Box>
 );
 
-// Filter bar component
 interface FilterBarProps {
     tahunOptions: string[];
     lembagaOptions: Lembaga[];
@@ -99,7 +93,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ tahunOptions, lembagaOptions, pro
                 ))}
             </DropdownInputController>
         </Grid>
-        <Grid size="auto">
+        {/* <Grid size="auto">
             <DropdownInputController
                 name="id_lembaga"
                 control={control}
@@ -113,7 +107,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ tahunOptions, lembagaOptions, pro
                     </MenuItem>
                 ))}
             </DropdownInputController>
-        </Grid>
+        </Grid> */}
         <Grid size="auto">
             <DropdownInputController
                 name="id_prodi"
@@ -135,6 +129,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ tahunOptions, lembagaOptions, pro
 );
 
 function ReportPage() {
+    const { user, isLoading: authLoading } = useAuth();
     const [tahunOptions, setTahunOptions] = useState<string[]>([]);
     const [lembagaOptions, setLembagaOptions] = useState<Lembaga[]>([]);
     const [prodiOptions, setProdiOptions] = useState<string[]>([]);
@@ -153,9 +148,10 @@ function ReportPage() {
     const { data: reportResponse, isLoading: isLoadingReport } = useGetReportQuery(
         {
             tahun_berlaku: filters.tahun_berlaku,
-            id_lembaga: filters.id_lembaga
+            id_lembaga: filters.id_lembaga,
+            id_fakultas: user?.id_fakultas
         },
-        { skip: !filters.tahun_berlaku }
+        { skip: !filters.tahun_berlaku || !user }
     );
 
     const reportData = reportResponse?.data;
@@ -248,7 +244,7 @@ function ReportPage() {
 
     const tableColumns = useMemo(() => TABLE_COLUMNS, []);
 
-    if (isLoading) {
+    if (isLoading || authLoading) {
         return <LoadingState />;
     }
 

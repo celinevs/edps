@@ -4,6 +4,7 @@ export interface User {
    email: string;
    role: string;
    nama_prodi: string;
+   nama_fakultas: string;
    is_active: boolean;
    id_prodi: string;
    id_fakultas: string;

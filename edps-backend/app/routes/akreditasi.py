@@ -58,7 +58,7 @@ def get_akreditasi():
         today = date.today()
         
         if fakultas:
-            query = query.filter(Akreditasi.prodi.has(fakultas=fakultas))
+            query = query.filter(Akreditasi.prodi.has(id_fakultas=fakultas))
 
         if tahun_berlaku:
             query = query.filter(Akreditasi.tahun_berlaku == tahun_berlaku)
@@ -1278,11 +1278,12 @@ def delete_akreditasi(id):
 def get_report():
     id_lembaga = request.args.get("id_lembaga", type=int)
     tahun_berlaku = request.args.get("tahun_berlaku")
+    id_fakultas = request.args.get("id_fakultas")
 
     if not tahun_berlaku:
             return error_response("Year must be filled", 400)
     
-    raw_df = fetch_data_from_db(year=tahun_berlaku)
+    raw_df = fetch_data_from_db(year=tahun_berlaku, id_fakultas=id_fakultas)
 
     if raw_df.empty:
         return success_response(message="No data available")

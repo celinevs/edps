@@ -12,10 +12,14 @@ prodi_bp = Blueprint("prodi", __name__)
 @prodi_bp.route("/prodi", methods=["GET"])
 @jwt_required()
 def get_prodi():
+    id_fakultas = request.args.get('id_fakultas')
+    
     try:
-        prodi_list = Prodi.query.order_by( 
-            Prodi.nama_prodi.asc()
-        ).all()
+        query = Prodi.query
+        if id_fakultas:
+            query = query.filter(Prodi.id_fakultas == id_fakultas)
+        
+        prodi_list = query.order_by(Prodi.nama_prodi.asc()).all()
 
         results = []
         for prodi in prodi_list:

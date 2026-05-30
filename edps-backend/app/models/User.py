@@ -27,5 +27,6 @@ class User(db.Model):
             'id_prodi': self.id_prodi,
             'id_fakultas': self.id_fakultas,
            'nama_prodi': self.prodi.nama_prodi if self.prodi else None,
+           'nama_fakultas': self.fakultas.nama_fakultas if self.fakultas else None,
         }
     

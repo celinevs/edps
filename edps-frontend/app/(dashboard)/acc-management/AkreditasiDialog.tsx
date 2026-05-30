@@ -42,7 +42,7 @@ export const AkreditasiRequestSchema = z.object({
 type AkreditasiRequest = z.infer<typeof AkreditasiRequestSchema>
 
 function AkreditasiDialog(props: AkreditasiDialogProps) {
-    const { data } = useGetProdiQuery();
+    const { data } = useGetProdiQuery(undefined);
     const [getQuestionSet] = useLazyGetQuestionSetByProdiQuery();
     const { open, onClose, accData } = props;
     const [PostAkreditasi] = usePostAkreditasiMutation();

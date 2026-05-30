@@ -24,6 +24,10 @@ import DropdownInputController from '@/app/component/controller/DropdownInputCon
 import TextInputController from "@/app/component/controller/TextInputController";
 import DateInputController from "@/app/component/controller/DateInputController";
 
+interface UploadData {
+    can_edit?: boolean
+}
+
 export const UploadCSVSchema = z.object({
     file: z
         .instanceof(File)
@@ -75,6 +79,7 @@ export type UploadCSVRequest = z.infer<typeof UploadCSVSchema>;
 function UploadQuestionPage() {
     const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
     const searchParams = useSearchParams();
+    const [uploadData, setUploadData] = useState<UploadData | null>(null);
     const id_qs = searchParams.get("id_qs");
     const [file, setFile] = useState<File>();
     const [gambar, setGambar] = useState<File>();
@@ -96,6 +101,14 @@ function UploadQuestionPage() {
     const [existingGambar, setExistingGambar] = useState<string>('')
 
     console.log(existingFile)
+
+    useEffect(() => {
+        const storedData = sessionStorage.getItem('uploadData');
+        if (storedData) {
+            const parsedData = JSON.parse(storedData);
+            setUploadData(parsedData);
+        }
+    }, [router]);
 
     useEffect(() => {
         if (lembagaData?.data) {
@@ -269,7 +282,9 @@ function UploadQuestionPage() {
                     <DropdownInputController
                         name="id_lembaga"
                         control={control}
+                        disabled={!uploadData?.can_edit}
                         label=""
+                        showClearButton={false}
                         sx={{
                             "& .MuiInputBase-root": {
                                 height: 35,
@@ -504,7 +519,6 @@ function UploadQuestionPage() {
                 </Grid>
             </Grid>
 
-            {/* Question File */}
             <Grid container mb={3}>
                 <Grid size={2}>
                     <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Question File*:</Typography>
@@ -532,12 +546,14 @@ function UploadQuestionPage() {
                                     variant="contained"
                                     component="label"
                                     sx={{ mt: 2, backgroundColor: "#5B0000" }}
+                                    disabled={!uploadData?.can_edit}
                                 >
                                     Select file
                                     <input
                                         hidden
                                         type="file"
                                         accept=".csv"
+                                        disabled={!uploadData?.can_edit}
                                         onChange={(e) => {
                                             if (e.target.files?.[0]) {
                                                 handleFile(e.target.files[0]);
@@ -587,21 +603,23 @@ function UploadQuestionPage() {
                                         {(file.size / 1024).toFixed(2)} KB
                                     </Typography>
                                 }
+                                {uploadData?.can_edit &&
 
-                                <Button
-                                    onClick={() => {
-                                        setValue("file", undefined, { shouldValidate: true });
-                                        setValue("existingFile", undefined, { shouldValidate: true });
+                                    <Button
+                                        onClick={() => {
+                                            setValue("file", undefined, { shouldValidate: true });
+                                            setValue("existingFile", undefined, { shouldValidate: true });
 
-                                        setFile(undefined);
-                                        setExistingFile(null);
-                                    }}
-                                    color="error"
-                                    size="small"
-                                    sx={{ mt: 1 }}
-                                >
-                                    Remove
-                                </Button>
+                                            setFile(undefined);
+                                            setExistingFile(null);
+                                        }}
+                                        color="error"
+                                        size="small"
+                                        sx={{ mt: 1 }}
+                                    >
+                                        Remove
+                                    </Button>
+                                }
                             </>
                         )}
                         <Typography
