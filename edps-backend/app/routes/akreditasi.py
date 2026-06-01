@@ -11,19 +11,34 @@ from datetime import datetime
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from sqlalchemy import func, case, cast, Date, Integer
 from datetime import datetime, date
-from app.service.analytic_service import fetch_data_from_db,prepare_features ,aggregate_per_exam, compute_and_combine_risk_metrics, compute_priority_table, predict_future_scores, generate_indicator_table, get_actual_vs_predicted
+from app.service.analytic_service import fetch_data_from_db,prepare_features ,aggregate_per_exam, compute_and_combine_risk_metrics, compute_priority_table, predict_future_scores, generate_indicator_table, get_actual_vs_predicted, get_prediction_visualization_data
 
 akreditasi_bp = Blueprint("akreditasi", __name__)
 
 @akreditasi_bp.route("/ml-dashboard", methods=["GET"])
+@jwt_required()
 def ml_dashboard():
-    # id_prodi = request.args.get("id_prodi")
+    id_prodi = request.args.get("id_prodi")
 
     graph = get_actual_vs_predicted(filtered='infokom', id_prodi='PR001')
+
+    raw_df = fetch_data_from_db(filtered='infokom', id_prodi='PR001',)
+
+    if raw_df.empty:
+        raise ValueError("No data found.")
+
+    feat_q = prepare_features(raw_df)
+    feat = aggregate_per_exam(feat_q)
+    # features = feat.groupby(["major", "exam"], as_index=False).last()
+
+    data = get_prediction_visualization_data(feat=feat, prediction_year='2024/2025')
+
+
 
     return success_response( 
         data={
         "graph": graph.to_dict(orient="records"),
+        "data": data
         },
         message="Dashboard fetched!"
     )
@@ -191,32 +206,58 @@ def get_akreditasi():
     except Exception as e:
         return handle_exception(e)
 
-@akreditasi_bp.route("/akreditasi/<id_akreditasi>", methods=["GET"])
+@akreditasi_bp.route("/akreditasi/help", methods=["GET"])
 @jwt_required()
-def get_akreditasi_help(id_akreditasi):
+def get_akreditasi_help():
     try:
-        qs = Akreditasi.query.get(id_akreditasi)
+        id_akreditasi = request.args.get("id_akreditasi")
+        id_qs = request.args.get("id_qs")
 
-        if not qs:
-            return error_response("Question set not found", 404)
+        if id_akreditasi:
+            akreditasi = Akreditasi.query.get(id_akreditasi)
 
-        return success_response(
-            data={
-                "email_pengisi": qs.pengisi.email if qs.pengisi else None,
-                "email_validator": qs.validator.email if qs.validator else None,
-                "tanggal_pengisian": qs.tanggal_pengisian,
-                "tanggal_validasi": qs.tanggal_validasi,
-                "label_link": qs.question_set.label_link,
-                "link": qs.question_set.link,
-                "gambar_path": qs.question_set.gambar_path,
-                "deskripsi_gambar": qs.question_set.deskripsi_gambar,
-            },
-            message="Question set retrieved successfully"
-        )
+            if not akreditasi:
+                return error_response("Akreditasi not found", 404)
+
+            return success_response(
+                data={
+                    "email_pengisi": akreditasi.pengisi.email if akreditasi.pengisi else None,
+                    "email_validator": akreditasi.validator.email if akreditasi.validator else None,
+                    "tanggal_pengisian": akreditasi.tanggal_pengisian,
+                    "tanggal_validasi": akreditasi.tanggal_validasi,
+                    "label_link": akreditasi.question_set.label_link,
+                    "link": akreditasi.question_set.link,
+                    "gambar_path": akreditasi.question_set.gambar_path,
+                    "deskripsi_gambar": akreditasi.question_set.deskripsi_gambar,
+                },
+                message="Question set retrieved successfully"
+            )
+
+        elif id_qs:
+            question_set = QuestionSet.query.get(id_qs)
+
+            if not question_set:
+                return error_response("Question set not found", 404)
+
+            return success_response(
+                data={
+                    "email_pengisi": None,
+                    "email_validator": None,
+                    "tanggal_pengisian": None,
+                    "tanggal_validasi": None,
+                    "label_link": question_set.label_link,
+                    "link": question_set.link,
+                    "gambar_path": question_set.gambar_path,
+                    "deskripsi_gambar": question_set.deskripsi_gambar,
+                },
+                message="Question set retrieved successfully"
+            )
+
+        return error_response("id_akreditasi or id_qs is required",400)
 
     except Exception as e:
         return handle_exception(e)
-
+    
 @akreditasi_bp.route('/akreditasi/dropdown', methods=["GET"])
 @jwt_required()
 def get_akreditasi_dropdown():
@@ -1279,6 +1320,9 @@ def get_report():
     id_lembaga = request.args.get("id_lembaga", type=int)
     tahun_berlaku = request.args.get("tahun_berlaku")
     id_fakultas = request.args.get("id_fakultas")
+
+    if id_fakultas in [None, "", "null", "None"]:
+        id_fakultas = None
 
     if not tahun_berlaku:
             return error_response("Year must be filled", 400)

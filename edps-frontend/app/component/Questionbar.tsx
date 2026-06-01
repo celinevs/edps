@@ -34,9 +34,9 @@ export default function Questionbar({
   useEffect(() => {
     const fetchHelpData = async () => {
       console.log('enter fetching...')
-      if (formData?.id_periode) {
+      if (formData?.id_periode || formData?.id_regulasi) {
         console.log('id_akreditasi exist! calling API....')
-        const result = await getAkreditasiHelp(formData?.id_periode);
+        const result = await getAkreditasiHelp({ id_akreditasi: formData?.id_periode, id_qs: formData?.id_regulasi });
         setAkreditasiHelp(result.data?.data)
       }
     }
@@ -93,9 +93,11 @@ export default function Questionbar({
               </IconButton>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center" }}>
-              <Typography variant="h6">
-                Due: {formatDate(dueDate)}
-              </Typography>
+              {dueDate &&
+                <Typography variant="h6">
+                  Due: {formatDate(dueDate)}
+                </Typography>
+              }
             </Box>
           </Toolbar>
         </AppBar>

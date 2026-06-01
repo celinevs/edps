@@ -41,6 +41,18 @@ function QuestionListPage() {
         router.push(`/question-list/upload?id_qs=${row.id_qs}`);
     };
 
+    const handleView = (row: QuestionSetItem) => {
+        sessionStorage.setItem('formData', JSON.stringify({
+            id_regulasi: row.id_qs,
+            nama_periode: `Review Question ${row.nama_lembaga} ${row.versi}`,
+            total_max_bobot: row.total_max_bobot,
+            lembaga: row.id_lembaga,
+            closed: true
+        }));
+
+        router.push('/form');
+    };
+
     const columns: Column<QuestionSetItem>[] = [
         { id: 'nama_lembaga', label: 'Accreditor' },
         { id: 'versi', label: 'Version' },
@@ -61,7 +73,14 @@ function QuestionListPage() {
                         // disabled={!row.can_edit || false}
                         onClick={() => handleUploadPage(row)}
                     >
-                        Edit File
+                        Edit Question
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => handleView(row)}
+                    >
+                        Review Question
                     </Button>
                 </Stack>
             ),

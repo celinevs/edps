@@ -10,7 +10,6 @@ import {
   AkreditasiHelp,
   ReportData,
 } from "@/model/Akreditasi";
-import { ChartDataPoint } from "@/app/(dashboard)/ml/page";
 
 export const addTagTypes = ["akreditasi"];
 
@@ -105,11 +104,18 @@ export const akreditasiApi = baseApi
       }),
       getAkreditasiHelpId: builder.mutation<
         APIResponse<AkreditasiHelp>,
-        string
+        {
+          id_akreditasi?: string;
+          id_qs?: string;
+        }
       >({
-        query: (id_akreditasi) => ({
-          url: `/akreditasi/${id_akreditasi}`,
+        query: ({ id_akreditasi, id_qs }) => ({
+          url: "/akreditasi/help",
           method: "GET",
+          params: {
+            ...(id_akreditasi && { id_akreditasi }),
+            ...(id_qs && { id_qs }),
+          },
         }),
         invalidatesTags: ["akreditasi"],
       }),
@@ -168,7 +174,7 @@ export const akreditasiApi = baseApi
         providesTags: ["akreditasi"],
       }),
       getDashboardML: builder.query<
-        APIResponse<ChartDataPoint[]>,
+        APIResponse<any>,
         void
       >({
         query: () => ({

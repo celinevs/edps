@@ -10,6 +10,7 @@ import numpy as np
 import os
 import joblib
 from sklearn.metrics import r2_score
+from typing import Optional
 
 def fetch_data_from_db(filtered=None, id_prodi=None, year=None, current_year=None, reviewed=False, id_fakultas=None):
     """Fetch raw data from database using SQLAlchemy"""
@@ -606,7 +607,7 @@ def compute_priority_table(df):
 def predict_future_scores(
     feat: pd.DataFrame,
     models_dir: str = "ml",
-    model_name: str | None = 'Random_Forest',   # None → auto-pick best saved model
+    model_name: str | None = 'Random_Forest', 
 ) -> pd.DataFrame:
     """
     End-to-end prediction pipeline in one function.
@@ -956,3 +957,263 @@ def get_actual_vs_predicted(
     result_df.attrs["n_samples"] = len(result_df)
 
     return result_df
+
+def get_prediction_visualization_data(
+    feat: pd.DataFrame,
+    models_dir: str = "ml",
+    model_name: str = "Random_Forest",
+    highlight_major: Optional[str] = None,
+    highlight_exam: Optional[str] = None,
+    actual_col: Optional[str] = "score_assessor_w",
+    prediction_year: Optional[str] = None,
+    n_histogram_bins: int = 20,
+    ci_lower_pct: float = 5.0,
+    ci_upper_pct: float = 95.0,
+) -> dict:
+    """
+    Prediction pipeline + visualization data for a RandomForestRegressor.
+
+    Charts returned
+    ---------------
+    1. treeDistribution  – histogram of all *tree* predictions for the
+                           highlighted row, with mean + CI marked.
+    2. actualVsPredicted – line chart: actual vs predicted across years
+                           for the highlighted major+exam combination only.
+
+    Meta returned
+    -------------
+    highlightedScore, lower_bound, upper_bound, std_dev,
+    all_tree_predictions (for the highlighted row), plus summary stats.
+    """
+
+    # ── Feature engineering ───────────────────────────────────────────────────
+    feat_all = feat.copy() 
+    feat = feat.copy()
+
+    if prediction_year:
+        feat = feat[feat["year"].astype(str).str.strip() == str(prediction_year)].copy()
+
+    if feat.empty:
+        raise ValueError(f"No data found for prediction_year='{prediction_year}'")
+    
+    feat["year"] = (
+        feat["year"].astype(str).str.extract(r"(\d{4})")[0].astype(int)
+    )
+    latest_year = feat["year"].max()
+    feat["year_norm"] = (
+        (latest_year - feat["year"].min())
+        / (feat["year"].max() - feat["year"].min() + 1e-9)
+    )
+
+    exam_cats  = sorted(feat["exam"].unique())
+    major_cats = sorted(feat["major"].unique())
+    feat["exam_enc"]  = feat["exam"].map({v: i for i, v in enumerate(exam_cats)})
+    feat["major_enc"] = feat["major"].map({v: i for i, v in enumerate(major_cats)})
+
+    PRED_FEATURES = [
+        "score_prodi_w", "score_lpmi_w",
+        "gap_lpmi_assessor", "agree_lpmi_assessor",
+        "assessor_prev", "assessor_growth", "assessor_ma3",
+        "lpmi_override_rate", "assessor_override_rate",
+        "year_norm", "exam_enc", "major_enc",
+    ]
+
+    for col, fallback in [
+        ("assessor_prev", "score_assessor_w"),
+        ("assessor_ma3",  "score_assessor_w"),
+        ("prodi_prev",    "score_prodi_w"),
+    ]:
+        if col in feat.columns and feat[col].isna().any():
+            feat[col] = feat[col].fillna(feat[fallback])
+
+    for col in ("assessor_growth", "prodi_growth"):
+        if col in feat.columns and feat[col].isna().any():
+            feat[col] = feat[col].fillna(0.0)
+
+    features = feat.dropna(subset=PRED_FEATURES).copy()
+    if features.empty:
+        raise ValueError("No rows remain after NaN imputation.")
+
+    X = features[PRED_FEATURES].values
+
+    # ── Load RandomForestRegressor ────────────────────────────────────────────
+    base_dir    = os.path.dirname(os.path.abspath(__file__))
+    models_path = os.path.join(base_dir, "..", models_dir)
+    model_path  = os.path.join(models_path, f"{model_name}.pkl")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model not found: {model_path}")
+
+    model = joblib.load(model_path)
+
+    # ── Ensemble mean prediction ──────────────────────────────────────────────
+    mean_preds = model.predict(X)
+
+    # ── Per-tree predictions → uncertainty ───────────────────────────────────
+    tree_preds  = np.array([tree.predict(X) for tree in model.estimators_])
+    std_preds   = tree_preds.std(axis=0)
+    lower_preds = np.percentile(tree_preds, ci_lower_pct, axis=0)
+    upper_preds = np.percentile(tree_preds, ci_upper_pct, axis=0)
+
+    features = features.copy()
+    features["predicted_score"] = mean_preds
+    features["std_dev"]         = std_preds
+    features["lower_bound"]     = lower_preds
+    features["upper_bound"]     = upper_preds
+    features["future_year"]     = latest_year + 1
+    features["row_label"]       = features["exam"] + " / " + features["major"]
+
+    # ── Identify highlighted row ──────────────────────────────────────────────
+    if highlight_major and highlight_exam:
+        mask = (
+            (features["major"] == highlight_major) &
+            (features["exam"]  == highlight_exam)
+        )
+        hi_idx = features[mask].index[0] if mask.any() else features.index[
+            int(np.argmin(np.abs(mean_preds - np.median(mean_preds))))
+        ]
+    else:
+        hi_idx = features.index[
+            int(np.argmin(np.abs(mean_preds - np.median(mean_preds))))
+        ]
+
+    hi_row        = features.loc[hi_idx]
+    hi_sample_idx = features.index.get_loc(hi_idx)
+    hi_tree_preds = tree_preds[:, hi_sample_idx]
+
+    hi_score = float(hi_row["predicted_score"])
+    hi_lower = float(hi_row["lower_bound"])
+    hi_upper = float(hi_row["upper_bound"])
+    hi_std   = float(hi_row["std_dev"])
+    hi_label = str(hi_row["row_label"])
+
+    # =========================================================================
+    # CHART 1 – Tree prediction distribution (histogram) for highlighted row
+    # =========================================================================
+    counts, bin_edges = np.histogram(hi_tree_preds, bins=n_histogram_bins)
+
+    tree_distribution = []
+    for i in range(len(counts)):
+        b_start = float(bin_edges[i])
+        b_end   = float(bin_edges[i + 1])
+        b_mid   = (b_start + b_end) / 2
+
+        if b_start <= hi_score < b_end or (i == len(counts) - 1 and hi_score == b_end):
+            zone = "mean"
+        elif b_mid < hi_lower or b_mid > hi_upper:
+            zone = "outside_ci"
+        else:
+            zone = "inside_ci"
+
+        tree_distribution.append({
+            "binStart": round(b_start, 4),
+            "binEnd":   round(b_end,   4),
+            "binLabel": f"{b_start:.3f}–{b_end:.3f}",
+            "count":    int(counts[i]),
+            "zone":     zone,
+        })
+
+    # =========================================================================
+    # CHART 2 – Actual vs Predicted for the highlighted major+exam only
+    # =========================================================================
+    actual_vs_predicted = []
+    if actual_col:
+        fa = feat_all.copy()
+        fa["year"] = (
+            fa["year"].astype(str).str.extract(r"(\d{4})")[0].astype(int)
+        )
+
+        fa_combo = fa[
+            (fa["major"] == str(hi_row["major"])) &
+            (fa["exam"]  == str(hi_row["exam"]))
+        ].copy().sort_values("year")
+
+        for _, row in fa_combo.iterrows():
+            row_year = int(row["year"])
+            
+            # Build a single-row df using that year's own context
+            year_subset = fa[fa["year"] <= row_year].copy()
+            year_latest = year_subset["year"].max()
+            year_min    = year_subset["year"].min()
+
+            single = row.to_frame().T.copy()
+            single["year_norm"] = (
+                (row_year - year_min) / (year_latest - year_min + 1e-9)
+            )
+            single["exam_enc"]  = single["exam"].map({v: i for i, v in enumerate(exam_cats)})
+            single["major_enc"] = single["major"].map({v: i for i, v in enumerate(major_cats)})
+
+            for col, fallback in [
+                ("assessor_prev", "score_assessor_w"),
+                ("assessor_ma3",  "score_assessor_w"),
+                ("prodi_prev",    "score_prodi_w"),
+            ]:
+                if col in single.columns and single[col].isna().any():
+                    single[col] = single[col].fillna(single[fallback])
+
+            for col in ("assessor_growth", "prodi_growth"):
+                if col in single.columns and single[col].isna().any():
+                    single[col] = single[col].fillna(0.0)
+
+            if single[PRED_FEATURES].isna().any().any():
+                continue  # skip unpredictable rows
+
+            X_single       = single[PRED_FEATURES].values
+            pred_mean      = float(model.predict(X_single)[0])
+            tree_p         = np.array([t.predict(X_single)[0] for t in model.estimators_])
+            pred_lower     = float(np.percentile(tree_p, ci_lower_pct))
+            pred_upper     = float(np.percentile(tree_p, ci_upper_pct))
+
+            # Override prediction_year with Chart 1's exact values
+            is_highlight = (str(row_year) == str(prediction_year)) if prediction_year else False
+            if is_highlight:
+                pred_mean  = hi_score
+                pred_lower = hi_lower
+                pred_upper = hi_upper
+
+            actual_val = None
+            if actual_col in row and pd.notna(row.get(actual_col)):
+                actual_val = round(float(row[actual_col]), 4)
+
+            actual_vs_predicted.append({
+                "label":      f"{row['exam']} / {row['major']}",
+                "year":       row_year,
+                "major":      str(row["major"]),
+                "exam":       str(row["exam"]),
+                "actual":     actual_val,
+                "predicted":  round(pred_mean,  4),
+                "lowerBound": round(pred_lower, 4),
+                "upperBound": round(pred_upper, 4),
+                "isHighlight": is_highlight,
+            })
+
+    # =========================================================================
+    # META
+    # =========================================================================
+    all_mean_preds = np.array(mean_preds)
+    meta = {
+        "model":               model_name,
+        "nTrees":              len(model.estimators_),
+        "futureYear":          int(latest_year + 1),
+        "totalRows":           len(features),
+        "ciLowerPct":          ci_lower_pct,
+        "ciUpperPct":          ci_upper_pct,
+        "predMin":             round(float(all_mean_preds.min()),      4),
+        "predMax":             round(float(all_mean_preds.max()),      4),
+        "predMean":            round(float(all_mean_preds.mean()),     4),
+        "predMedian":          round(float(np.median(all_mean_preds)), 4),
+        "highlightedLabel":    hi_label,
+        "highlightedScore":    round(hi_score, 4),
+        "highlightedStdDev":   round(hi_std,   4),
+        "highlightedLower":    round(hi_lower,  4),
+        "highlightedUpper":    round(hi_upper,  4),
+        "highlightedPercentile": round(
+            float((all_mean_preds < hi_score).mean() * 100), 2
+        ),
+        "highlightedTreePredictions": [round(float(v), 4) for v in hi_tree_preds.tolist()],
+    }
+
+    return {
+        "meta":              meta,
+        "treeDistribution":  tree_distribution,
+        "actualVsPredicted": actual_vs_predicted,
+    }
