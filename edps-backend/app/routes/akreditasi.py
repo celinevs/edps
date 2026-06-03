@@ -4,12 +4,13 @@ from app.models.Jawaban import Jawaban
 from app.models.Akreditasi import Akreditasi
 from app.models.QuestionList import LamEmba, LamInfokom
 from app.models.QuestionSet import QuestionSet
+from app.models.Prodi import Prodi
 from app.models.User import User
 from app.utils.response_handler import success_response, error_response, handle_exception
 from app.utils.decorator import role_required
 from datetime import datetime
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
-from sqlalchemy import func, case, cast, Date, Integer
+from sqlalchemy import func, case, cast, Date, Integer, and_
 from datetime import datetime, date
 from app.service.analytic_service import fetch_data_from_db,prepare_features ,aggregate_per_exam, compute_and_combine_risk_metrics, compute_priority_table, predict_future_scores, generate_indicator_table, get_actual_vs_predicted, get_prediction_visualization_data
 
@@ -19,10 +20,14 @@ akreditasi_bp = Blueprint("akreditasi", __name__)
 @jwt_required()
 def ml_dashboard():
     id_prodi = request.args.get("id_prodi")
+    tahun_berlaku = request.args.get("tahun_berlaku")
 
-    graph = get_actual_vs_predicted(filtered='infokom', id_prodi='PR001')
+    prodi = Prodi.query.get(id_prodi)
 
-    raw_df = fetch_data_from_db(filtered='infokom', id_prodi='PR001',)
+    if prodi.lembaga_ids[0] == 1:
+        raw_df = fetch_data_from_db(filtered='infokom', id_prodi=id_prodi)
+    else:
+        raw_df = fetch_data_from_db(filtered='emba', id_prodi=id_prodi)
 
     if raw_df.empty:
         raise ValueError("No data found.")
@@ -31,13 +36,12 @@ def ml_dashboard():
     feat = aggregate_per_exam(feat_q)
     # features = feat.groupby(["major", "exam"], as_index=False).last()
 
-    data = get_prediction_visualization_data(feat=feat, prediction_year='2024/2025')
+    data = get_prediction_visualization_data(feat=feat, prediction_year=tahun_berlaku)
 
 
 
     return success_response( 
         data={
-        "graph": graph.to_dict(orient="records"),
         "data": data
         },
         message="Dashboard fetched!"
@@ -264,6 +268,7 @@ def get_akreditasi_dropdown():
     try:
         id_prodi = request.args.get('id_prodi')
         id_lembaga = request.args.get('id_lembaga')
+        is_reviewed = request.args.get('is_reviewed')
 
         query = Akreditasi.query
 
@@ -274,6 +279,7 @@ def get_akreditasi_dropdown():
              query = query.join(Akreditasi.question_set).filter(
                  QuestionSet.id_lembaga == id_lembaga
                  )
+        
              
         query = query.order_by(Akreditasi.tahun_berlaku.desc())
         akreditasi_list = query.all()
@@ -298,11 +304,15 @@ def get_akreditasi_dropdown():
 def get_unique_tahun_berlaku():
 
     id_prodi = request.args.get('id_prodi')
+    is_reviewed = request.args.get('is_reviewed')
 
     if id_prodi in ["", "undefined", "null"]:
         id_prodi = None
 
     query = db.session.query(Akreditasi.tahun_berlaku).distinct()
+
+    if is_reviewed:
+            query = query.filter(Akreditasi.status == 'Reviewed')
 
     if id_prodi:
         query = query.filter(Akreditasi.id_prodi == id_prodi)
@@ -798,23 +808,31 @@ def get_dashboard_detail_infokom():
 
         radar_data = (
             db.session.query(
-                LamInfokom.kode_kriteria,
-                LamInfokom.kriteria,
-                func.sum(LamInfokom.bobot).label("total_weight"),
-                func.sum(Jawaban.skor_prodi).label("prodi"),
-                func.sum(Jawaban.skor_lpmi).label("lpmi"),
-                func.sum(Jawaban.skor_assesor).label("assesor"),
+            LamInfokom.kode_kriteria,
+            LamInfokom.kriteria,
+            func.sum(LamInfokom.bobot).label("total_weight"),
+
+            func.coalesce(func.sum(Jawaban.skor_prodi), 0).label("prodi"),
+            func.coalesce(func.sum(Jawaban.skor_lpmi), 0).label("lpmi"),
+            func.coalesce(func.sum(Jawaban.skor_assesor), 0).label("assesor"),
+            func.count(Jawaban.jawaban_lpmi).label("lpmi_count"),
+            func.count(Jawaban.jawaban_assesor).label("assessor_count"),
             )
-            .join(
+            .outerjoin(
                 Jawaban,
-                (Jawaban.id_qs == LamInfokom.id_qs) &
-                (Jawaban.q_no == LamInfokom.q_no)
-            )
-            .filter(Jawaban.id_akreditasi == id_akreditasi)
-            .group_by(LamInfokom.kode_kriteria, LamInfokom.kriteria)
+                and_(
+                    Jawaban.id_qs == LamInfokom.id_qs,
+                    Jawaban.q_no == LamInfokom.q_no,
+                    Jawaban.id_akreditasi == id_akreditasi)
+                    )
+            .filter(LamInfokom.id_qs == id_qs)
+            .group_by(
+                LamInfokom.kode_kriteria,
+                LamInfokom.kriteria
+                )
             .order_by(LamInfokom.kode_kriteria)
             .all()
-        )
+            )
 
         labels = []
         prodi = []
@@ -830,8 +848,11 @@ def get_dashboard_detail_infokom():
             lpmi.append(((row.lpmi or 0) / weight) * 100)
             assesor.append(((row.assesor or 0) / weight) * 100)
 
+            if not row.lpmi_count > 0:
+                continue
+
             prodi_vs_lpmi = round(float(row.lpmi or 0) - float(row.prodi or 0), 2)
-            lpmi_vs_assesor = round(float(row.assesor or 0) - float(row.lpmi or 0), 2)
+            lpmi_vs_assesor = round(float(row.assesor or 0) - float(row.lpmi or 0), 2) if row.assessor_count > 0 else None
 
 
             gap_heatmap.append({
@@ -841,7 +862,7 @@ def get_dashboard_detail_infokom():
             })
 
             # use assessor gap if exists
-            if row.assesor is not None:
+            if row.assessor_count > 0:
                 current_gap = lpmi_vs_assesor
                 source = "LPMI vs Assesor"
             else:
@@ -884,6 +905,8 @@ def get_dashboard_detail_infokom():
             }
         }
 
+        current_end_year = int(akreditasi_obj.tahun_berlaku.split("/")[1])
+
         akreditasi = (
             db.session.query(
                 Akreditasi.tahun_berlaku,
@@ -893,7 +916,8 @@ def get_dashboard_detail_infokom():
                 )
                 .filter(
                 Akreditasi.id_qs == id_qs,
-                Akreditasi.id_prodi == akreditasi_obj.id_prodi
+                Akreditasi.id_prodi == akreditasi_obj.id_prodi,
+                cast(func.substr(Akreditasi.tahun_berlaku, 6, 4), Integer).between(current_end_year - 4, current_end_year)
                 )
                 .group_by(Akreditasi.tahun_berlaku)
                 .order_by(cast(func.substr(Akreditasi.tahun_berlaku, 6, 4), Integer).desc())
@@ -1053,22 +1077,31 @@ def get_dashboard_detail_emba():
         # Radar data with criteria grouping
         radar_data = (
             db.session.query(
-                LamEmba.kode_kriteria,
-                func.sum(LamEmba.bobot).label("total_weight"),
-                func.sum(Jawaban.skor_prodi).label("prodi"),
-                func.sum(Jawaban.skor_lpmi).label("lpmi"),
-                func.sum(Jawaban.skor_assesor).label("assesor"),
+            LamEmba.kode_kriteria,
+            LamEmba.kriteria,
+            func.sum(LamEmba.bobot).label("total_weight"),
+
+            func.coalesce(func.sum(Jawaban.skor_prodi), 0).label("prodi"),
+            func.coalesce(func.sum(Jawaban.skor_lpmi), 0).label("lpmi"),
+            func.coalesce(func.sum(Jawaban.skor_assesor), 0).label("assesor"),
+            func.count(Jawaban.jawaban_lpmi).label("lpmi_count"),
+            func.count(Jawaban.jawaban_assesor).label("assessor_count"),
             )
-            .join(
+            .outerjoin(
                 Jawaban,
-                (Jawaban.id_qs == LamEmba.id_qs) &
-                (Jawaban.q_no == LamEmba.q_no)
-            )
-            .filter(Jawaban.id_akreditasi == id_akreditasi)
-            .group_by(LamEmba.kode_kriteria)
+                and_(
+                    Jawaban.id_qs == LamEmba.id_qs,
+                    Jawaban.q_no == LamEmba.q_no,
+                    Jawaban.id_akreditasi == id_akreditasi)
+                    )
+            .filter(LamEmba.id_qs == id_qs)
+            .group_by(
+                LamEmba.kode_kriteria,
+                LamEmba.kriteria
+                )
             .order_by(LamEmba.kode_kriteria)
             .all()
-        )
+            )
 
         labels = []
         prodi = []
@@ -1079,7 +1112,7 @@ def get_dashboard_detail_emba():
 
         for row in radar_data:
             weight = row.total_weight or 1
-            labels.append(row.kode_kriteria)
+            labels.append(row.kriteria)
             prodi_val = float(row.prodi or 0)
             lpmi_val = float(row.lpmi or 0)
             assesor_val = float(row.assesor or 0)
@@ -1088,17 +1121,20 @@ def get_dashboard_detail_emba():
             lpmi.append((lpmi_val / weight) * 100 if weight > 0 else 0)
             assesor.append((assesor_val / weight) * 100 if weight > 0 else 0)
 
+            if not row.lpmi_count > 0:
+                continue
+
             prodi_vs_lpmi = round(lpmi_val - prodi_val, 2)
-            lpmi_vs_assesor = round(assesor_val - lpmi_val, 2)
+            lpmi_vs_assesor = round(assesor_val - lpmi_val, 2) if row.assessor_count > 0 else None
 
             gap_heatmap.append({
-                "criteria": row.kode_kriteria,
+                "criteria": row.kriteria,
                 "prodi_vs_lpmi": prodi_vs_lpmi,
                 "lpmi_vs_assesor": lpmi_vs_assesor,
             })
 
             # Determine max gap
-            if assesor_val is not None:
+            if row.assessor_count > 0:
                 current_gap = lpmi_vs_assesor
                 source = "LPMI vs Assesor"
             else:
@@ -1106,7 +1142,7 @@ def get_dashboard_detail_emba():
                 source = "Prodi vs LPMI"
 
             current_data = {
-                "criteria": row.kode_kriteria,
+                "criteria": row.kriteria,
                 "value": current_gap,
                 "source": source
                 }
@@ -1136,6 +1172,7 @@ def get_dashboard_detail_emba():
         }
 
         # Bar chart data
+        current_end_year = int(akreditasi_obj.tahun_berlaku.split("/")[1])
         akreditasi = (
             db.session.query(
                 Akreditasi.tahun_berlaku,
@@ -1145,7 +1182,8 @@ def get_dashboard_detail_emba():
                 )
                 .filter(
                 Akreditasi.id_qs == id_qs,
-                Akreditasi.id_prodi == akreditasi_obj.id_prodi
+                Akreditasi.id_prodi == akreditasi_obj.id_prodi,
+                cast(func.substr(Akreditasi.tahun_berlaku, 6, 4), Integer).between(current_end_year - 4, current_end_year)
                 )
                 .group_by(Akreditasi.tahun_berlaku)
                 .order_by(cast(func.substr(Akreditasi.tahun_berlaku, 6, 4), Integer).desc())
@@ -1165,17 +1203,24 @@ def get_dashboard_detail_emba():
         # Calculate consistency score using criteria data
         consistency_score = None
         if criteria_table:
-            total_gaps = 0
+            total_gaps_assesor = 0
+            total_gaps_lpmi = 0
             total_possible_gaps = 0
             for row in criteria_table:
                 if row["max_weight"] > 0:
-                    gap = abs(row["total_lpmi"] - row["total_assesor"])
-                    max_possible_gap = row["max_weight"] * 0.75
-                    total_gaps += gap
+                    gap_as = abs(row["total_lpmi"] - row["total_assesor"])
+                    gap_lpmi = abs(row["total_lpmi"] - row["total_prodi"])
+                    max_possible_gap = row["max_weight"]
+                    total_gaps_assesor += gap_as
+                    total_gaps_lpmi += gap_lpmi
                     total_possible_gaps += max_possible_gap
             
             if total_possible_gaps > 0:
-                consistency_score = max(0, 100 - (total_gaps / total_possible_gaps) * 100)
+                avg_gap_prodi_lpmi_pct = (total_gaps_lpmi/ total_possible_gaps) * 100
+                avg_gap_lpmi_assesor_pct = (total_gaps_assesor/ total_possible_gaps) * 100
+                overall_inconsistency = (avg_gap_prodi_lpmi_pct +avg_gap_lpmi_assesor_pct) / 2
+                consistency_score = max(0, 100 - overall_inconsistency)
+                # consistency_score = max(0, 100 - (total_gaps_assesor / total_possible_gaps) * 100)
                 consistency_score = round(consistency_score, 2)
         
         # Prediction and risk metrics
@@ -1233,6 +1278,19 @@ def add_akreditasi():
             if field not in data or not data[field]:
                 return error_response(f"{field} wajib diisi", 400)
         
+        tanggal_mulai = datetime.strptime(data["tanggal_mulai"], "%Y-%m-%d")
+        tanggal_selesai_prodi = datetime.strptime(data["tanggal_selesai_prodi"], "%Y-%m-%d")
+        tanggal_selesai_lpmi = datetime.strptime(data["tanggal_selesai_lpmi"], "%Y-%m-%d")
+
+        if tanggal_mulai > tanggal_selesai_prodi:
+            return error_response("Start date cannot be later than the Prodi due date",400)
+        
+        if tanggal_mulai > tanggal_selesai_lpmi:
+            return error_response( "Start date cannot be later than the LPMI due date",400)
+        
+        if tanggal_selesai_prodi > tanggal_selesai_lpmi:
+            return error_response("LPMI due date must be on or after the Prodi due date",400)
+        
         existing = Akreditasi.query.filter_by(id_prodi=data["id_prodi"] ,tahun_berlaku=data["tahun_berlaku"]).first()
 
         if existing:
@@ -1240,9 +1298,9 @@ def add_akreditasi():
                 "Year already exists, please reselect another year", 400)
 
         akreditasi = Akreditasi(
-            tanggal_mulai=datetime.strptime(data["tanggal_mulai"], "%Y-%m-%d"),
-            tanggal_selesai_prodi=datetime.strptime(data["tanggal_selesai_prodi"], "%Y-%m-%d"),
-            tanggal_selesai_lpmi=datetime.strptime(data["tanggal_selesai_lpmi"], "%Y-%m-%d"),
+            tanggal_mulai=tanggal_mulai,
+            tanggal_selesai_prodi=tanggal_selesai_prodi,
+            tanggal_selesai_lpmi=tanggal_selesai_lpmi,
             nama_akreditasi=data["nama_akreditasi"],
             tahun_berlaku=data["tahun_berlaku"],
             id_qs=data["id_qs"],
@@ -1270,15 +1328,29 @@ def update_akreditasi(id):
         if not akreditasi:
             return error_response("Akreditasi tidak ditemukan", 404)
         
-        existing = Akreditasi.query.filter_by(id_prodi=data["id_prodi"] ,tahun_berlaku=data["tahun_berlaku"]).first()
+        # existing = Akreditasi.query.filter_by(id_prodi=data["id_prodi"] ,tahun_berlaku=data["tahun_berlaku"]).first()
 
-        if existing:
-            return error_response(
-                "Year already exists, please reselect another year", 400)
+        # if existing:
+        #     return error_response(
+        #         "Year already exists, please reselect another year", 400)
+        
+        tanggal_mulai = datetime.strptime(data["tanggal_mulai"], "%Y-%m-%d")
+        tanggal_selesai_prodi = datetime.strptime(data["tanggal_selesai_prodi"], "%Y-%m-%d")
+        tanggal_selesai_lpmi = datetime.strptime(data["tanggal_selesai_lpmi"], "%Y-%m-%d")
 
-        akreditasi.tanggal_mulai = datetime.strptime(data["tanggal_mulai"], "%Y-%m-%d")
-        akreditasi.tanggal_selesai_prodi = datetime.strptime(data["tanggal_selesai_prodi"], "%Y-%m-%d")
-        akreditasi.tanggal_selesai_lpmi = datetime.strptime(data["tanggal_selesai_lpmi"], "%Y-%m-%d")
+        if tanggal_mulai > tanggal_selesai_prodi:
+            return error_response("Start date cannot be later than the Prodi due date",400)
+        
+        if tanggal_mulai > tanggal_selesai_lpmi:
+            return error_response( "Start date cannot be later than the LPMI due date",400)
+        
+        if tanggal_selesai_prodi > tanggal_selesai_lpmi:
+            return error_response("LPMI due date must be on or after the Prodi due date",400)
+        
+
+        akreditasi.tanggal_mulai = tanggal_mulai
+        akreditasi.tanggal_selesai_prodi = tanggal_selesai_prodi
+        akreditasi.tanggal_selesai_lpmi = tanggal_selesai_lpmi
         akreditasi.nama_akreditasi = data["nama_akreditasi"]
         akreditasi.tahun_berlaku = data["tahun_berlaku"]
         akreditasi.id_qs = data["id_qs"]

@@ -333,10 +333,10 @@ def compute_and_combine_risk_metrics(df, year=None):
     with multiple exams.
 
     Risk formula (Method C — trend-aware):
-      risk = (1 - score_assessor_w)*0.45
+      risk = (1 - score_assessor_w)*0.60
              + gap_lpmi_assessor*0.20
-             + (1 - agree_lpmi_assessor)*0.15
-             + assessor_override_rate*0.10
+             + (1 - agree_lpmi_assessor)*0.05
+             + assessor_override_rate*0.05
              + trend_penalty*0.10
 
     Returns:
@@ -359,17 +359,17 @@ def compute_and_combine_risk_metrics(df, year=None):
         (1 - df["score_assessor_w"]) * 0.45 +
         df["gap_lpmi_assessor"] * 0.20 +
         (1 - df["agree_lpmi_assessor"]) * 0.15 +
-        # df["assessor_override_rate"] * 0.10 +
+        df["assessor_override_rate"] * 0.10 +
         df["trend_penalty"] * 0.10
     )
 
     # Normalize to 0–1
-    # df["risk_score"] = normalize_column(df["risk_score_raw"])
+    # df["risk_score"] = normalize_column(df["risk_score"])
 
     # Risk category
     df["risk_level"] = pd.cut(
         df["risk_score"],
-        bins=[0, 0.33, 0.66, 1.01],
+        bins=[0, 0.15, 0.30, 1.01],
         labels=["Low", "Medium", "High"],
         include_lowest=True
     )
@@ -1018,17 +1018,31 @@ def get_prediction_visualization_data(
         "year_norm", "exam_enc", "major_enc",
     ]
 
-    for col, fallback in [
-        ("assessor_prev", "score_assessor_w"),
-        ("assessor_ma3",  "score_assessor_w"),
-        ("prodi_prev",    "score_prodi_w"),
-    ]:
-        if col in feat.columns and feat[col].isna().any():
-            feat[col] = feat[col].fillna(feat[fallback])
+    # for col, fallback in [
+    #     ("assessor_prev", "score_assessor_w"),
+    #     ("assessor_ma3",  "score_assessor_w"),
+    #     ("prodi_prev",    "score_prodi_w"),
+    # ]:
+    #     if col in feat.columns and feat[col].isna().any():
+    #         feat[col] = feat[col].fillna(feat[fallback])
 
-    for col in ("assessor_growth", "prodi_growth"):
-        if col in feat.columns and feat[col].isna().any():
-            feat[col] = feat[col].fillna(0.0)
+    # for col in ("assessor_growth", "prodi_growth"):
+    #     if col in feat.columns and feat[col].isna().any():
+    #         feat[col] = feat[col].fillna(0.0)
+
+    # ─────────────────────────────────────────────
+    # HANDLE NaNs
+    # ─────────────────────────────────────────────
+    if feat["assessor_prev"].isna().any():
+        feat["assessor_prev"]   = feat["assessor_prev"].fillna(feat["score_assessor_w"])
+    if feat["assessor_growth"].isna().any():
+        feat["assessor_growth"] = feat["assessor_growth"].fillna(0.0)
+    if feat["assessor_ma3"].isna().any():
+        feat["assessor_ma3"]    = feat["assessor_ma3"].fillna(feat["score_assessor_w"])
+    if feat["prodi_prev"].isna().any():
+        feat["prodi_prev"]      = feat["prodi_prev"].fillna(feat["score_prodi_w"])
+    if feat["prodi_growth"].isna().any():
+        feat["prodi_growth"]    = feat["prodi_growth"].fillna(0.0)
 
     features = feat.dropna(subset=PRED_FEATURES).copy()
     if features.empty:

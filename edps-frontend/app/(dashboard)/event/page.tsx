@@ -109,6 +109,9 @@ function EventPage() {
     }, [tahunData]) // Added tahunData as dependency
 
     const handleView = (row: Akreditasi) => {
+        const dueDate = new Date(row.tanggal_selesai);
+        dueDate.setDate(dueDate.getDate() + 1);
+
         sessionStorage.setItem('formData', JSON.stringify({
             id_regulasi: row.question_set.id_qs,
             id_periode: row.id_akreditasi,
@@ -124,6 +127,9 @@ function EventPage() {
     };
 
     const handleValidation = (row: Akreditasi) => {
+        const dueDate = new Date(row.tanggal_selesai);
+        dueDate.setDate(dueDate.getDate() + 1);
+
         sessionStorage.setItem('formData', JSON.stringify({
             id_regulasi: row.question_set.id_qs,
             id_periode: row.id_akreditasi,
@@ -185,7 +191,7 @@ function EventPage() {
         },
         {
             id: 'visual',
-            label: 'Visual',
+            label: 'Score Visual',
             render: (row) => {
                 const max = row.question_set.total_max_bobot || 1;
 
@@ -240,6 +246,7 @@ function EventPage() {
             label: 'Deadline Status',
             render: (row) => {
                 const dueDate = new Date(row.tanggal_selesai);
+                dueDate.setDate(dueDate.getDate() + 1);
 
                 const isClosed = today > dueDate;
 
@@ -271,7 +278,11 @@ function EventPage() {
                             variant="contained"
                             onClick={() => handleView(row)}
                         >
-                            {row.status == 'In Progress' && !(today > new Date(row.tanggal_selesai)) ? 'Edit Form' : 'Review'}
+                            {
+                                row.status === 'In Progress' && !(today > new Date(new Date(row.tanggal_selesai).setDate(new Date(row.tanggal_selesai).getDate() + 1)))
+                                    ? 'Edit Form'
+                                    : 'Review'
+                            }
                         </Button>
                     }
                     {(user?.role == "SUPERADMIN" || user?.role == "LPMI" || user?.role == "UPPS") &&
@@ -280,7 +291,7 @@ function EventPage() {
                             variant="contained"
                             onClick={() => handleValidation(row)}
                         >
-                            {((row.status == 'Submitted' || row.status == 'Validating') && !(today > new Date(row.tanggal_selesai))) ? 'Validate Form' : 'Review'}
+                            {((row.status == 'Submitted' || row.status == 'Validating') && !(today > new Date(new Date(row.tanggal_selesai).setDate(new Date(row.tanggal_selesai).getDate() + 1)))) ? 'Validate Form' : 'Review'}
                         </Button>
                     }
 
@@ -307,12 +318,12 @@ function EventPage() {
 
     if (authLoading) {
         return (
-            <Box 
-                sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center', 
-                    minHeight: '100vh' 
+            <Box
+                sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    minHeight: '100vh'
                 }}
             >
                 <CircularProgress />

@@ -134,7 +134,7 @@ function ReportPage() {
     const [lembagaOptions, setLembagaOptions] = useState<Lembaga[]>([]);
     const [prodiOptions, setProdiOptions] = useState<string[]>([]);
 
-    const { data: tahunData, isLoading: isLoadingTahun } = useGetTahunBerlakuQuery({ id_prodi: undefined });
+    const { data: tahunData, isLoading: isLoadingTahun } = useGetTahunBerlakuQuery({ id_prodi: undefined, is_reviewed: true });
     const { data: lembagaData, isLoading: isLoadingLembaga } = useGetLembagaQuery(undefined);
 
     const { control, watch, setValue } = useForm<ReportFilter>({
@@ -360,6 +360,7 @@ function ReportPage() {
                             <NoPaginationTable
                                 columns={tableColumns}
                                 rows={filteredReportData.indicator_table || []}
+                                maxHeight={550}
                             />
                         </Grid>
                     </Grid>

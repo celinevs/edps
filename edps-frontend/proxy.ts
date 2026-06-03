@@ -12,7 +12,7 @@ export async function proxy(request: NextRequest) {
   console.log("Token value:", token?.value);
 
   const isPublicRoute = pathname === "/login";
-  const isAdminRoute = ["/user"]
+  const isAdminRoute = ["/user", "/acc-management", "/assesor"]
 
   if (isPublicRoute) {
     console.log("Public route - allowing");

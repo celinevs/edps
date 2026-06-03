@@ -119,7 +119,7 @@ function AssesorPage() {
                         variant="contained"
                         onClick={() => handleReview(row)}
                     >
-                        {(row.status == 'Reviewed') ? 'Review Form' : 'Input Assessor Score'}
+                        {(row.status == 'Reviewing' || row.status == 'Validated') ? 'Input Assessor Score': 'Review Form'}
                     </Button>
                     <Button
                         size="small"

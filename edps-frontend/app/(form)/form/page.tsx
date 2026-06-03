@@ -537,7 +537,7 @@ function FormPage() {
                                         </Grid>
                                     )}
                                     
-                                    {((!formData?.is_lpmi) && (["Validated", "Reviewed", "Reviewing"].includes(status || ""))) || formData?.is_upps && (
+                                    {((!formData?.is_lpmi || formData?.is_upps) && (["Validated", "Reviewed", "Reviewing"].includes(status || ""))) && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -552,7 +552,7 @@ function FormPage() {
                                         </Grid>
                                     )}
                                     
-                                    {((!formData?.is_admin || formData?.is_upps) && (["Reviewed"].includes(status || ""))) && (
+                                    {((!formData?.is_admin && !formData?.is_upps) && (["Reviewed"].includes(status || "")))  && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -614,7 +614,7 @@ function FormPage() {
                                         </Grid>
                                     </Grid>
                                     
-                                    {((!formData?.is_lpmi || !formData?.is_upps) && getAnswer[q.q_no]?.note_lpmi) && (
+                                    {((!formData?.is_lpmi) && getAnswer[q.q_no]?.note_lpmi) && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>

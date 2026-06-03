@@ -92,6 +92,7 @@ function AccManagementPage() {
                 const today = new Date();
                 const dueDate = new Date(row.tanggal_selesai);
 
+                dueDate.setDate(dueDate.getDate() + 1);
                 const isClosed = today > dueDate;
 
                 return (

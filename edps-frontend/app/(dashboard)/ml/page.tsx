@@ -1,7 +1,11 @@
 "use client";
 
 import { LineChart, BarChart } from "@mui/x-charts";
+import { useState, useEffect } from "react";
 import { useGetDashboardMLQuery } from "@/api/akreditasi";
+import { useGetProdiQuery } from "@/api/prodi";
+import { useGetTahunBerlakuQuery } from "@/api/akreditasi";
+import { GetProdi } from "@/model/Prodi";
 import {
     Box,
     Card,
@@ -15,7 +19,14 @@ import {
     Stack,
     alpha,
     useTheme,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    SelectChangeEvent,
 } from "@mui/material";
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,11 +91,221 @@ const ZONE_COLOR: Record<TreeDistributionBin["zone"], { bg: string; light: strin
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function MLPage() {
     const theme = useTheme();
-    const { data, isLoading, isError } = useGetDashboardMLQuery();
+    const [selectedProdi, setSelectedProdi] = useState<string>("");
+    const [selectedTahun, setSelectedTahun] = useState<string>("");
+    const [prodiList, setProdiList] = useState<GetProdi[]>([]);
+    const [tahunList, setTahunList] = useState<string[]>([]);
 
-    if (isLoading) {
+    // Fetch prodi data
+    const { data: prodiData, isLoading: isLoadingProdi, error: prodiError } = useGetProdiQuery(undefined);
+    
+    // Fetch tahun data based on selected prodi
+    const { data: tahunData, isLoading: isLoadingTahun, error: tahunError } = useGetTahunBerlakuQuery({ 
+        id_prodi: selectedProdi || undefined,
+        is_reviewed: true
+    }, { skip: !selectedProdi });
+    
+    // Fetch ML dashboard data with params (skip if no selection)
+    const { 
+        data, 
+        isLoading: isLoadingML, 
+        isError,
+        error: mlError,
+        refetch 
+    } = useGetDashboardMLQuery(
+        { 
+            tahun_berlaku: selectedTahun, 
+            id_prodi: selectedProdi 
+        },
+        { skip: !selectedTahun || !selectedProdi }
+    );
+
+    // Set prodi list from API
+    useEffect(() => {
+        if (prodiData?.data) {
+            setProdiList(prodiData.data);
+        }
+    }, [prodiData]);
+
+    // Set tahun list from API and auto-select first tahun
+    useEffect(() => {
+        if (tahunData?.data && tahunData.data.length > 0) {
+            const tahunArray = tahunData.data;
+            setTahunList(tahunArray);
+            // Auto-select first tahun
+            setSelectedTahun(tahunArray[0]);
+        } else {
+            setTahunList([]);
+            setSelectedTahun("");
+        }
+    }, [tahunData]);
+
+    // Refetch data when params change
+    useEffect(() => {
+        if (selectedProdi && selectedTahun) {
+            refetch();
+        }
+    }, [selectedProdi, selectedTahun, refetch]);
+
+    // Handle prodi change
+    const handleProdiChange = (event: SelectChangeEvent) => {
+        const newProdi = event.target.value;
+        setSelectedProdi(newProdi);
+        setSelectedTahun(""); // Reset tahun when prodi changes
+    };
+
+    // Handle tahun change
+    const handleTahunChange = (event: SelectChangeEvent) => {
+        setSelectedTahun(event.target.value);
+    };
+
+    // Check if selection is complete
+    const isSelectionComplete = selectedProdi && selectedTahun;
+
+    // Show loading state only when selection is complete and ML data is loading
+    const showLoading = isSelectionComplete && isLoadingML;
+
+    // Render dropdown section (reused across different states)
+    const renderDropdowns = () => (
+        <Grid container spacing={2}>
+            <Grid size={{ xs: 12, md: 6 }}>
+                <FormControl fullWidth>
+                    <InputLabel>Program Studi</InputLabel>
+                    <Select
+                        value={selectedProdi}
+                        label="Program Studi"
+                        onChange={handleProdiChange}
+                        disabled={isLoadingProdi}
+                    >
+                        <MenuItem value="" disabled>
+                            Select Program Studi
+                        </MenuItem>
+                        {prodiList.map((prodi) => (
+                            <MenuItem key={prodi.id_prodi} value={prodi.id_prodi}>
+                                {prodi.nama_prodi}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+                {prodiError && (
+                    <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+                        Failed to load program data
+                    </Typography>
+                )}
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+                <FormControl fullWidth disabled={!selectedProdi || isLoadingTahun}>
+                    <InputLabel>Tahun Berlaku</InputLabel>
+                    <Select
+                        value={selectedTahun}
+                        label="Tahun Berlaku"
+                        onChange={handleTahunChange}
+                    >
+                        {tahunList.map((tahun) => (
+                            <MenuItem key={tahun} value={tahun}>
+                                {tahun}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+                {tahunError && (
+                    <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+                        Failed to load tahun data
+                    </Typography>
+                )}
+            </Grid>
+        </Grid>
+    );
+
+    // Show dropdown selection UI when no selection or still loading prodi/tahun
+    if (!isSelectionComplete || isLoadingProdi || (selectedProdi && isLoadingTahun)) {
         return (
-            <Box sx={{ p: 3 }}>
+            <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
+                <Card
+                    elevation={0}
+                    sx={{
+                        borderRadius: 4,
+                        background: `linear-gradient(135deg, ${alpha(theme.palette.primary.dark, 0.05)} 0%, ${alpha(theme.palette.primary.light, 0.02)} 100%)`,
+                        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                    }}
+                >
+                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                        <Typography
+                            variant="h4"
+                            fontWeight="700"
+                            sx={{
+                                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                                backgroundClip: "text",
+                                WebkitBackgroundClip: "text",
+                                WebkitTextFillColor: "transparent",
+                                mb: 1,
+                            }}
+                        >
+                            ML Prediction Dashboard
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+                            Random Forest — Advanced Forecast Analysis
+                        </Typography>
+
+                        {renderDropdowns()}
+
+                        {/* ── Notice Message ── */}
+                        <Box sx={{ mt: 4, textAlign: "center" }}>
+                            <Alert 
+                                severity="info" 
+                                icon={<InfoOutlinedIcon />}
+                                sx={{ 
+                                    borderRadius: 2,
+                                    justifyContent: "center",
+                                    "& .MuiAlert-message": { textAlign: "center" }
+                                }}
+                            >
+                                <Typography variant="body1" fontWeight="500">
+                                    Please select Program Studi and Tahun Berlaku to view prediction data
+                                </Typography>
+                            </Alert>
+                        </Box>
+                    </CardContent>
+                </Card>
+            </Box>
+        );
+    }
+
+    // Show loading skeleton when ML data is loading
+    if (showLoading) {
+        return (
+            <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
+                <Card
+                    elevation={0}
+                    sx={{
+                        borderRadius: 4,
+                        mb: 4,
+                        background: `linear-gradient(135deg, ${alpha(theme.palette.primary.dark, 0.05)} 0%, ${alpha(theme.palette.primary.light, 0.02)} 100%)`,
+                        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                    }}
+                >
+                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                        <Typography
+                            variant="h4"
+                            fontWeight="700"
+                            sx={{
+                                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                                backgroundClip: "text",
+                                WebkitBackgroundClip: "text",
+                                WebkitTextFillColor: "transparent",
+                                mb: 1,
+                            }}
+                        >
+                            ML Prediction Dashboard
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                            Random Forest — Advanced Forecast Analysis
+                        </Typography>
+                        
+                        {renderDropdowns()}
+                    </CardContent>
+                </Card>
+                
                 <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 2, mb: 3 }} />
                 <Grid container spacing={3}>
                     {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -99,24 +320,105 @@ export default function MLPage() {
         );
     }
 
+    // Show error state WITH dropdowns
     if (isError || !data) {
         return (
-            <Box sx={{ p: 3 }}>
-                <Alert severity="error" sx={{ borderRadius: 2 }}>
-                    Failed to load prediction data. Please try again later.
+            <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
+                <Card
+                    elevation={0}
+                    sx={{
+                        borderRadius: 4,
+                        mb: 4,
+                        background: `linear-gradient(135deg, ${alpha(theme.palette.primary.dark, 0.05)} 0%, ${alpha(theme.palette.primary.light, 0.02)} 100%)`,
+                        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                    }}
+                >
+                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                        <Typography
+                            variant="h4"
+                            fontWeight="700"
+                            sx={{
+                                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                                backgroundClip: "text",
+                                WebkitBackgroundClip: "text",
+                                WebkitTextFillColor: "transparent",
+                                mb: 1,
+                            }}
+                        >
+                            ML Prediction Dashboard
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                            Random Forest — Advanced Forecast Analysis
+                        </Typography>
+                        
+                        {renderDropdowns()}
+                    </CardContent>
+                </Card>
+                
+                <Alert 
+                    severity="error" 
+                    icon={<ErrorOutlineIcon />}
+                    sx={{ borderRadius: 2, mb: 2 }}
+                >
+                    <Typography variant="body1" fontWeight="500">
+                        Failed to load prediction data. Please try again later or select different criteria.
+                    </Typography>
+                    {mlError && (
+                        <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+                            Error details: {typeof mlError === 'string' ? mlError : 'Network or server error'}
+                        </Typography>
+                    )}
                 </Alert>
+                
+                {/* Retry button suggestion */}
+                <Box sx={{ mt: 2, textAlign: 'center' }}>
+                    <Typography variant="body2" color="text.secondary">
+                        Try selecting a different Program Studi or Tahun Berlaku
+                    </Typography>
+                </Box>
             </Box>
         );
     }
 
     const response = data as PredictionResponse;
-    const { meta, treeDistribution, actualVsPredicted } = response?.data.data ?? {};
+    const { meta, treeDistribution, actualVsPredicted } = response?.data?.data ?? {};
 
     if (!meta || !treeDistribution || !actualVsPredicted) {
         return (
-            <Box sx={{ p: 3 }}>
+            <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
+                <Card
+                    elevation={0}
+                    sx={{
+                        borderRadius: 4,
+                        mb: 4,
+                        background: `linear-gradient(135deg, ${alpha(theme.palette.primary.dark, 0.05)} 0%, ${alpha(theme.palette.primary.light, 0.02)} 100%)`,
+                        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                    }}
+                >
+                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                        <Typography
+                            variant="h4"
+                            fontWeight="700"
+                            sx={{
+                                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                                backgroundClip: "text",
+                                WebkitBackgroundClip: "text",
+                                WebkitTextFillColor: "transparent",
+                                mb: 1,
+                            }}
+                        >
+                            ML Prediction Dashboard
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                            Random Forest — Advanced Forecast Analysis
+                        </Typography>
+                        
+                        {renderDropdowns()}
+                    </CardContent>
+                </Card>
+                
                 <Alert severity="warning" sx={{ borderRadius: 2 }}>
-                    No prediction data available.
+                    No prediction data available for the selected criteria. Please try different selections.
                 </Alert>
             </Box>
         );
@@ -139,12 +441,11 @@ export default function MLPage() {
         { label: "Std Dev", value: meta.highlightedStdDev.toFixed(3), icon: "📊" },
         { label: `CI ${meta.ciLowerPct}%`, value: meta.highlightedLower.toFixed(3), icon: "⬇️" },
         { label: `CI ${meta.ciUpperPct}%`, value: meta.highlightedUpper.toFixed(3), icon: "⬆️" },
-        { label: "Percentile", value: `${meta.highlightedPercentile}%`, icon: "📈" },
     ];
 
     return (
         <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
-            {/* ── Header Section ── */}
+            {/* ── Header Section with Dropdowns ── */}
             <Card
                 elevation={0}
                 sx={{
@@ -168,10 +469,13 @@ export default function MLPage() {
                     >
                         ML Prediction Dashboard
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        {meta.model.replace(/_/g, " ")} — Advanced Forecast Analysis
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        {meta.model?.replace(/_/g, " ") || "Random Forest"} — Advanced Forecast Analysis
                     </Typography>
-                    <Stack direction="row" flexWrap="wrap" spacing={2} useFlexGap>
+                    
+                    {renderDropdowns()}
+
+                    <Stack direction="row" flexWrap="wrap" spacing={2} useFlexGap sx={{ mt: 3 }}>
                         <Chip
                             label={`Forecast Year: ${meta.futureYear}`}
                             size="small"
@@ -380,7 +684,7 @@ export default function MLPage() {
             </Card>
 
             {/* ── Overall Stats Footer ── */}
-            <Paper
+            {/* <Paper
                 elevation={0}
                 sx={{
                     borderRadius: 3,
@@ -395,22 +699,22 @@ export default function MLPage() {
                 <Grid container spacing={2}>
                     <Grid size={{ xs: 6, sm: 3 }}>
                         <Typography variant="caption" color="text.secondary">Min</Typography>
-                        <Typography variant="body1" fontWeight="500">{meta.predMin}</Typography>
+                        <Typography variant="body1" fontWeight="500">{meta.predMin?.toFixed(3)}</Typography>
                     </Grid>
                     <Grid size={{ xs: 6, sm: 3 }}>
                         <Typography variant="caption" color="text.secondary">Max</Typography>
-                        <Typography variant="body1" fontWeight="500">{meta.predMax}</Typography>
+                        <Typography variant="body1" fontWeight="500">{meta.predMax?.toFixed(3)}</Typography>
                     </Grid>
                     <Grid size={{ xs: 6, sm: 3 }}>
                         <Typography variant="caption" color="text.secondary">Mean</Typography>
-                        <Typography variant="body1" fontWeight="500">{meta.predMean}</Typography>
+                        <Typography variant="body1" fontWeight="500">{meta.predMean?.toFixed(3)}</Typography>
                     </Grid>
                     <Grid size={{ xs: 6, sm: 3 }}>
                         <Typography variant="caption" color="text.secondary">Median</Typography>
-                        <Typography variant="body1" fontWeight="500">{meta.predMedian}</Typography>
+                        <Typography variant="body1" fontWeight="500">{meta.predMedian?.toFixed(3)}</Typography>
                     </Grid>
                 </Grid>
-            </Paper>
+            </Paper> */}
         </Box>
     );
 }
