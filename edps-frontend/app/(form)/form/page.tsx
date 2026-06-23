@@ -145,7 +145,7 @@ function FormPage() {
             const baseTotal = dataPertanyaan?.data.jumlah_pertanyaan || 0;
 
             const finalTotal = formData?.lembaga === 2
-                ? baseTotal + 2
+                ? baseTotal + 1
                 : baseTotal;
 
             setTotalPage(finalTotal)
@@ -357,8 +357,9 @@ function FormPage() {
         (status != 'In Progress' && !isNotProdi) ||
         (status != "Submitted" && status != "Validating" && formData?.is_lpmi) ||
         (status != "Validated" && status != "Reviewing" && formData?.is_admin);
-    const isRecapPage = formData?.lembaga == 2 && currentPage === pertanyaan.length + 2;
-    const isDosenPage = formData?.lembaga == 2 && currentPage === pertanyaan.length + 1;
+    const isRecapPage = formData?.lembaga == 2 && currentPage === pertanyaan.length + 1;
+    // const isDosenPage = formData?.lembaga == 2 && currentPage === pertanyaan.length + 1;
+    const isDosenPage = false; // Dosen page is commented out
     
     return (
         <Box sx={{ mx: "auto" }}>
@@ -423,9 +424,10 @@ function FormPage() {
                     recapData={recapData}
                     setRecapData={setRecapData}
                 />
-            ) : (
+            ) 
+            : (
                 <>
-                    <Typography variant="h4" sx={{ mb: 3 }}>{isDosenPage ? 'Pemenuhan Syarat Kualitikasi Dosen untuk Syarat Perlu Terakreditasi Unggul' : formData?.lembaga == 1 ? q.no_kriteria : `Kriteria ${q.kode_kriteria}:`} {!isDosenPage && q.kriteria}</Typography>
+                    <Typography variant="h4" sx={{ mb: 3 }}>{/* isDosenPage ? 'Pemenuhan Syarat Kualitikasi Dosen untuk Syarat Perlu Terakreditasi Unggul' :  */formData?.lembaga == 1 ? q.no_kriteria : `Kriteria ${q.kode_kriteria}:`} {!isDosenPage && q.kriteria}</Typography>
 
                     <Grid container spacing={2} gap={2}>
                         <Grid size={1.5}>
@@ -434,6 +436,7 @@ function FormPage() {
                                 {formData?.lembaga == 1 && <Typography variant="body1" sx={{ fontStyle: 'italic' }}>Weight: {q.bobot}</Typography>}
                             </Paper>
                         </Grid>
+                        {/* Dosen page section commented out
                         {isDosenPage ?
                             <DosenPage
                                 dosenAnswer={dosenAnswer}
@@ -443,7 +446,7 @@ function FormPage() {
                                 status={formData?.status}
                                 saveAnswer={saveAnswer}
                             />
-                            :
+                            : */}
                             <Grid size={8.5}>
                                 <Paper sx={{
                                     px: 3,
@@ -537,7 +540,7 @@ function FormPage() {
                                         </Grid>
                                     )}
                                     
-                                    {((!formData?.is_lpmi) && (["Validated", "Reviewed", "Reviewing"].includes(status || ""))) || formData?.is_upps && (
+                                    {((!formData?.is_lpmi || formData?.is_upps) && (["Validated", "Reviewed", "Reviewing"].includes(status || ""))) && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -552,7 +555,7 @@ function FormPage() {
                                         </Grid>
                                     )}
                                     
-                                    {((!formData?.is_admin || formData?.is_upps) && (["Reviewed"].includes(status || ""))) && (
+                                    {((!formData?.is_admin && !formData?.is_upps) && (["Reviewed"].includes(status || "")))  && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -614,7 +617,7 @@ function FormPage() {
                                         </Grid>
                                     </Grid>
                                     
-                                    {((!formData?.is_lpmi || !formData?.is_upps) && getAnswer[q.q_no]?.note_lpmi) && (
+                                    {((!formData?.is_lpmi) && getAnswer[q.q_no]?.note_lpmi) && (
                                         <Grid container spacing={2} sx={{ mb: 3 }}>
                                             <Grid size={{ xs: 12, sm: 2 }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
@@ -694,7 +697,7 @@ function FormPage() {
                                     )}
                                 </Paper>
                             </Grid>
-                        }
+                        {/* } */}
                         {formData?.lembaga == 1 && (
                             <Grid size={2}>
                                 <WeightSummaryTable

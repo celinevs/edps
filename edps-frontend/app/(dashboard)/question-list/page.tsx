@@ -21,7 +21,7 @@ function QuestionListPage() {
     const [page, setPage] = useState(0)
     const [perPage, setPerPage] = useState(5)
     const [questionSet, setQuestionSet] = useState<QuestionSetItem[]>([]);
-    const { data } = useGetQuestionSetPaginatedQuery({
+    const { data, isLoading } = useGetQuestionSetPaginatedQuery({
         page: page + 1,
         per_page: perPage,
     });
@@ -39,6 +39,14 @@ function QuestionListPage() {
         }));
 
         router.push(`/question-list/upload?id_qs=${row.id_qs}`);
+    };
+
+    const handleCreateUploadPage = () => {
+        sessionStorage.setItem('uploadData',JSON.stringify({
+                can_edit: true
+            }));
+
+        router.push('/question-list/upload');
     };
 
     const handleView = (row: QuestionSetItem) => {
@@ -159,7 +167,7 @@ function QuestionListPage() {
                     <Button
                         variant="contained"
                         size="medium"
-                        onClick={() => router.push('/question-list/upload')}
+                        onClick={handleCreateUploadPage}
                         startIcon={<AddIcon />}
                         sx={{
                             borderRadius: 4,

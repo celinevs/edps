@@ -26,6 +26,7 @@ export interface NoPaginationTableProps<T extends Record<string, any>> {
   enableGrouping?: boolean;
   showRowNumber?: boolean;
   rowNumberLabel?: string;
+  maxHeight?: number;
 }
 
 export default function NoPaginationTable<T extends Record<string, any>>({
@@ -34,6 +35,7 @@ export default function NoPaginationTable<T extends Record<string, any>>({
   enableGrouping = false,
   showRowNumber = false,
   rowNumberLabel = 'No',
+  maxHeight = 440
 }: NoPaginationTableProps<T>) {
   
   const processedColumns = React.useMemo(() => {
@@ -177,7 +179,7 @@ export default function NoPaginationTable<T extends Record<string, any>>({
 
   return (
     <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-      <TableContainer sx={{ maxHeight: 440 }}>
+      <TableContainer sx={{ maxHeight: maxHeight }}>
         <Table stickyHeader>
           <TableHead>{renderTableHeader()}</TableHead>
 

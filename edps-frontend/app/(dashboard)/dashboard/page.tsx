@@ -426,7 +426,7 @@ function DashboardPage() {
                 color: 'primary.main',
               }}
             >
-              Dashboard {user?.nama_prodi? user?.nama_prodi: user?.role}
+              Dashboard {user?.nama_prodi? user?.nama_prodi: user?.role} {user?.nama_fakultas}
             </Typography>
           </Box>
         </Grid>
@@ -669,7 +669,6 @@ function DashboardPage() {
             </Grid>
 
             <Grid size={3}>
-              <Tooltip title="Heatmap showing gaps between Prodi vs LPMI and LPMI vs Assessor (Green: Positive, Red: Negative)" arrow>
                 <Box
                   sx={{
                     background: "#fff",
@@ -778,7 +777,6 @@ function DashboardPage() {
                     )}
                   </Box>
                 </Box>
-              </Tooltip>
             </Grid>
 
             {/* BAR CHART - FIXED SIZE */}
@@ -879,7 +877,7 @@ function DashboardPage() {
                   p: 2,
                 }}
               >
-                <Typography variant="caption">Critical Gap {dashboardData?.max_gap.source? `(${dashboardData?.max_gap.source})`: ''}</Typography>
+                <Typography variant="caption">Critical Gap {dashboardData?.max_gap?.source? `(${dashboardData?.max_gap?.source})`: ''}</Typography>
                 <Typography variant="h5" fontWeight={700}>
                   {dashboardData?.max_gap != null
                     ? Number(dashboardData.max_gap.value).toFixed(2)
@@ -902,7 +900,7 @@ function DashboardPage() {
                 <Typography variant="caption">Prediction Score {(dashboardData as any)?.prediction?.future_year? `in ${(dashboardData as any)?.prediction?.future_year}`: ''}</Typography>
                 <Typography variant="h5" fontWeight={700}>
                   {(dashboardData as any)?.prediction?.predicted_score != null
-                    ? Number((dashboardData as any).prediction.predicted_score).toFixed(3)
+                    ? `${Number((dashboardData as any).prediction.predicted_score * 100).toFixed(2)}%`
                     : "-"}
                 </Typography>
               </Box>

@@ -2,6 +2,7 @@
 
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, Typography, Grid, MenuItem, Snackbar, Alert } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import { useAuth } from '@/app/service/hooks/useAuth';
 import { usePostusersMutation, useUpdateusersMutation } from '@/api/user';
 import { useGetFakultasQuery, useGetProdiQuery } from '@/api/prodi';
 import { GetProdi } from '@/model/Prodi';
@@ -13,6 +14,7 @@ import { z } from 'zod';
 import { useState, useEffect } from 'react';
 import TextInputController from '@/app/component/controller/TextInputController';
 import DropdownInputController from '@/app/component/controller/DropdownInputController';
+import SwitchInputController from '@/app/component/controller/SwitchInputController';
 
 interface UserDialogProps {
     open: boolean;
@@ -38,7 +40,8 @@ export const UserRequestSchema = z.object({
 type UserRequest = z.infer<typeof UserRequestSchema>
 
 function UserDialog(props: UserDialogProps) {
-    const { data } = useGetProdiQuery();
+    const { user, isLoading: authLoading } = useAuth();
+    const { data } = useGetProdiQuery(undefined);
     const { data: fakulData } = useGetFakultasQuery();
     const { open, onClose, userData } = props;
     const [PostUser] = usePostusersMutation();
@@ -49,6 +52,12 @@ function UserDialog(props: UserDialogProps) {
         open: false,
         message: '',
         severity: 'success' as 'success' | 'error'
+    });
+    const availableRoles = Object.values(Roles).filter((role) => {
+        if (user?.role === 'ADMIN') {
+            return role !== 'SUPERADMIN';
+        }
+        return true;
     });
 
     useEffect(() => {
@@ -117,7 +126,7 @@ function UserDialog(props: UserDialogProps) {
 
                 setSnackbar({
                     open: true,
-                    message: 'User berhasil diupdate!',
+                    message: 'User updated successfully!',
                     severity: 'success'
                 });
             } else {
@@ -125,22 +134,17 @@ function UserDialog(props: UserDialogProps) {
 
                 setSnackbar({
                     open: true,
-                    message: 'User berhasil dibuat!',
+                    message: 'User created successfully!',
                     severity: 'success'
                 });
             }
-            setSnackbar({
-                open: true,
-                message: 'User berhasil dibuat!',
-                severity: 'success'
-            });
             reset();
             onClose();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error submitting form:', error);
             setSnackbar({
                 open: true,
-                message: 'Gagal membuat user',
+                message: error.data.message,
                 severity: 'error'
             });
         }
@@ -195,7 +199,7 @@ function UserDialog(props: UserDialogProps) {
                             label="Role"
                             showClearButton={false}
                         >
-                            {Object.values(Roles).map((role) => (
+                            {availableRoles.map((role) => (
                                 <MenuItem key={role} value={role}>
                                     {role}
                                 </MenuItem>
@@ -237,6 +241,11 @@ function UserDialog(props: UserDialogProps) {
                                     </MenuItem>
                                 ))}
                             </DropdownInputController>}
+                        <SwitchInputController
+                            name="is_active"
+                            control={control}
+                            label={watch('is_active') ? 'Active' : 'Inactive'}
+                        />
                     </DialogContent>
                     <Divider />
                     <DialogActions>

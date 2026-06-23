@@ -223,6 +223,7 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                                     displayFormat="YYYY"
                                     dataFormat="YYYY"
                                     views={['year']}
+                                    disabled={!!accData}
                                 />
                             </Grid>
                             {/* <Grid size={6}>
@@ -261,6 +262,8 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                                     name="id_prodi"
                                     control={control}
                                     label="Prodi"
+                                    disabled={!!accData}
+                                    showClearButton = {false}
                                 >
                                     {prodi.map((category) => (
                                         <MenuItem
@@ -277,7 +280,8 @@ function AkreditasiDialog(props: AkreditasiDialogProps) {
                                     name="id_qs"
                                     control={control}
                                     label="Regulasi"
-                                    disabled={!selectedProdi}
+                                    disabled={!selectedProdi || !!accData}
+                                    showClearButton = {false}
                                 >
                                     {versiRegulasi.map((category) => (
                                         <MenuItem

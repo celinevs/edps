@@ -400,7 +400,6 @@ function AnalyticPage() {
         {
             id: 'elemen_kriteria',
             label: '',
-            align: 'center'
         },
         { id: 'total_pertanyaan', label: 'Questions', align: 'center' },
         { id: 'q_no', label: 'Q.No', align: 'center' },

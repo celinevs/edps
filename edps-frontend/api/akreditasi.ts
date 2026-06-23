@@ -56,7 +56,7 @@ export const akreditasiApi = baseApi
       }),
       getTahunBerlaku: builder.query<
         APIResponse<string[]>,
-        { id_prodi?: string }
+        { id_prodi?: string, is_reviewed?: boolean }
       >({
         query: (params) => ({
           url: "/akreditasi/tahun-berlaku",
@@ -175,11 +175,15 @@ export const akreditasiApi = baseApi
       }),
       getDashboardML: builder.query<
         APIResponse<any>,
-        void
+        {
+          tahun_berlaku: string;
+          id_prodi?: string;
+        }
       >({
-        query: () => ({
+        query: (params) => ({
           url: `/ml-dashboard`,
           method: "GET",
+          params
         }),
         providesTags: ["akreditasi"],
       }),

@@ -259,7 +259,7 @@ def saved_submit_jawaban():
                 if is_infokom:
                     skor_prodi = (jawaban / 4) * pertanyaan.bobot
                 else:
-                    skor_prodi = jawaban
+                    skor_prodi = jawaban * pertanyaan.bobot
 
                 existing = Jawaban.query.filter_by(
                     id_akreditasi=id_akreditasi,
@@ -453,7 +453,7 @@ def review_lpmi():
                 if is_infokom:
                     skor_lpmi = (jawaban / 4) * pertanyaan.bobot
                 else:
-                    skor_lpmi = jawaban
+                    skor_lpmi = jawaban * pertanyaan.bobot
 
                 existing = Jawaban.query.filter_by(
                     id_akreditasi=id_akreditasi,
@@ -640,7 +640,7 @@ def review_assesor():
                 if is_infokom:
                     skor_assesor = (jawaban / 4) * pertanyaan.bobot
                 else:
-                    skor_assesor = jawaban
+                    skor_assesor = jawaban * pertanyaan.bobot
                 
                 existing = Jawaban.query.filter_by(
                     id_akreditasi=id_akreditasi,

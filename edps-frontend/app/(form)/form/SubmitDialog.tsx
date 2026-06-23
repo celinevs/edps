@@ -80,7 +80,10 @@ function SubmitDialog(props: SubmitDialogProps) {
             const unanswered = pertanyaan.filter(q => !answeredIds.has(q.q_no));
 
             if (unanswered.length > 0) {
-                const missingNumbers = unanswered.map((q, i) => `${i + 1} `).join("\n");
+                const missingNumbers = unanswered
+                    .map(q => pertanyaan.findIndex(p => p.q_no === q.q_no) + 1)
+                    .join("\n");
+
                 alert(`❗ There are still unanswered questions:\n\n${missingNumbers}`);
                 return;
             }
